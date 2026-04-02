@@ -3,7 +3,10 @@
     "allow": [
       "Bash(node --version && npm --version)",
       "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && npx create-next-app@latest . --typescript --tailwind --eslint --app --src=no --import-alias \"@/*\" --turbopack --use-npm 2>&1)",
-      "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && mv ORCHARD_GUARD_SPEC.md ../ORCHARD_GUARD_SPEC.md.bak && npx create-next-app@latest . --typescript --tailwind --eslint --app --src=no --import-alias \"@/*\" --turbopack --use-npm 2>&1)"
+      "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && mv ORCHARD_GUARD_SPEC.md ../ORCHARD_GUARD_SPEC.md.bak && npx create-next-app@latest . --typescript --tailwind --eslint --app --src=no --import-alias \"@/*\" --turbopack --use-npm 2>&1)",
+      "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && npm install better-sqlite3 recharts node-cron date-fns lucide-react 2>&1)",
+      "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && npm install -D @types/better-sqlite3 @types/node-cron 2>&1)",
+      "Bash(cd \"C:/Users/Justin/Documents/orchard-guard\" && npx shadcn@latest init -d --defaults 2>&1)"
     ]
   }
 }
