@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrchardGuard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #09090B;
+  --glass: rgba(255,255,255,0.03);
+  --glass-hover: rgba(255,255,255,0.05);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-border-hover: rgba(255,255,255,0.1);
+  --glass-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --glass-shadow-hover: 0 8px 32px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.25);
+  --text: #FAFAFA;
+  --text2: #A1A1AA;
+  --text3: #71717A;
+  --text4: #3F3F46;
+  --border: #27272A;
+  --green: #22C55E;
+  --green-dim: rgba(34,197,94,0.1);
+  --green-glow: rgba(34,197,94,0.3);
+  --green-border: rgba(34,197,94,0.2);
+  --red: #EF4444;
+  --red-dim: rgba(239,68,68,0.08);
+  --red-border: rgba(239,68,68,0.2);
+  --yellow: #EAB308;
+  --yellow-dim: rgba(234,179,8,0.08);
+  --yellow-border: rgba(234,179,8,0.2);
+  --blue: #3B82F6;
+  --blue-dim: rgba(59,130,246,0.08);
+  --blue-border: rgba(59,130,246,0.2);
+}
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 20% 20%, rgba(34,197,94,0.03) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(59,130,246,0.02) 0%, transparent 50%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── GLASS ────────────────────────────── */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-shadow);
+  transition: all 0.25s ease;
+}
+
+.glass:hover {
+  background: var(--glass-hover);
+  border-color: var(--glass-border-hover);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.glass-static {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── NAV ──────────────────────────────── */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: rgba(9,9,11,0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  z-index: 100;
+}
+
+.nav-brand {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.nav-center {
+  display: flex;
+  gap: 32px;
+  margin: 0 auto;
+}
+
+.nav-link {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text3);
+  cursor: pointer;
+  transition: color 0.2s;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.nav-link:hover { color: var(--text2); }
+
+.nav-link.active {
+  color: var(--text);
+  border-bottom: 1px solid var(--green);
+  padding-bottom: 3px;
+}
+
+.nav-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green-glow);
+  animation: pulse 3s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--green-glow); }
+  50% { opacity: 0.5; box-shadow: 0 0 4px var(--green-glow); }
+}
+
+/* ── MAIN ─────────────────────────────── */
+.main {
+  position: relative;
+  z-index: 1;
+  padding-top: 56px;
+  max-width: 920px;
+  margin: 0 auto;
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+/* ── HEADER ───────────────────────────── */
+.header {
+  padding: 40px 0 28px;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.orchard-name {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.header-date {
+  font-size: 14px;
+  color: var(--text3);
+}
+
+/* ── HEALTH GAUGE ─────────────────────── */
+.health-gauge {
+  position: relative;
+  width: 100px;
+  height: 100px;
+}
+
+.health-gauge svg {
+  transform: rotate(-90deg);
+  width: 100px;
+  height: 100px;
+}
+
+.health-gauge .track {
+  fill: none;
+  stroke: rgba(255,255,255,0.04);
+  stroke-width: 4;
+}
+
+.health-gauge .fill {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 264;
+  stroke-dashoffset: 21;
+  filter: drop-shadow(0 0 6px var(--green-glow));
+}
+
+.health-score {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.health-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--green);
+  line-height: 1;
+}
+
+.health-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+/* ── TOP ROW ──────────────────────────── */
+.top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Weather Card */
+.weather-card {
+  padding: 24px 28px;
+}
+
+.weather-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.weather-temp {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 54px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--text);
+}
+
+.weather-unit {
+  font-size: 22px;
+  color: var(--text3);
+}
+
+.weather-condition {
+  text-align: right;
+}
+
+.weather-desc {
+  font-size: 14px;
+  color: var(--text2);
+  margin-bottom: 2px;
+}
+
+.weather-updated {
+  font-size: 11px;
+  color: var(--text4);
+}
+
+/* Fixed: 2x2 grid with clear spacing */
+.weather-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 18px;
+}
+
+.w-stat {}
+
+.w-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text4);
+  margin-bottom: 4px;
+}
+
+.w-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text2);
+}
+
+/* Status Card */
+.status-card {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.status-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.status-icon.clear {
+  background: var(--green-dim);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+}
+
+.status-primary {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.status-secondary {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.6;
+}
+
+.status-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+}
+
+.btn:hover {
+  border-color: var(--glass-border-hover);
+  color: var(--text);
+  background: var(--glass-hover);
+}
+
+.btn:active { transform: scale(0.97); }
+
+/* ── BLOOM PROGRESS ───────────────────── */
+.bloom-card {
+  padding: 22px 28px;
+  margin-bottom: 16px;
+}
+
+.bloom-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.bloom-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text3);
+  font-weight: 500;
+}
+
+.bloom-current {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 500;
+}
+
+.bloom-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.bloom-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text4);
+  flex-shrink: 0;
+  transition: all 0.3s;
+  position: relative;
+  z-index: 2;
+}
+
+.bloom-dot.active {
+  width: 14px;
+  height: 14px;
+  background: var(--green);
+  box-shadow: 0 0 16px var(--green-glow), 0 0 4px var(--green);
+}
+
+.bloom-line {
+  flex: 1;
+  height: 2px;
+  background: rgba(255,255,255,0.05);
+  position: relative;
+  z-index: 1;
+}
+
+.bloom-line.glow {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  opacity: 0.4;
+}
+
+.bloom-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0;
+}
+
+.bloom-label {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: var(--text4);
+  text-align: center;
+  flex: 1;
+}
+
+.bloom-label:first-child { text-align: left; flex: none; }
+.bloom-label:last-child { text-align: right; flex: none; }
+.bloom-label.active { color: var(--green); font-weight: 600; font-size: 11px; }
+
+/* ── SECTION ──────────────────────────── */
+.section {
+  margin-bottom: 16px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 20px 28px 16px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--text2);
+}
+
+.section-sub {
+  font-size: 11px;
+  color: var(--text4);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── FORECAST ─────────────────────────── */
+.forecast-card {
+  overflow: hidden;
+}
+
+.f-row {
+  display: grid;
+  grid-template-columns: 130px 90px 55px 1fr;
+  align-items: center;
+  padding: 14px 28px;
+  gap: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.f-row + .f-row { border-top: 1px solid rgba(255,255,255,0.03); }
+.f-row:hover { background: rgba(255,255,255,0.02); }
+
+.f-row.today {
+  background: rgba(34,197,94,0.06);
+  border-left: 2px solid var(--green);
+  padding-left: 26px;
+}
+
+.f-day {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.f-day.is-today { color: var(--green); font-weight: 600; }
+
+.f-temps {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.f-low { color: var(--text4); }
+
+.f-precip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text3);
+}
+
+.f-risk {
+  font-size: 13px;
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.f-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.f-dot.ok { background: var(--text4); }
+.f-dot.watch { background: var(--yellow); box-shadow: 0 0 8px rgba(234,179,8,0.3); }
+.f-dot.danger { background: var(--red); box-shadow: 0 0 8px rgba(239,68,68,0.3); }
+
+.f-risk.elevated { color: var(--yellow); }
+
+/* ── ACTION CARDS ─────────────────────── */
+.actions-section {
+  margin-bottom: 16px;
+}
+
+.actions-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--text2);
+  padding: 20px 4px 16px;
+}
+
+.action-card {
+  padding: 22px 24px;
+  margin: 0 0 12px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.action-card.priority { border-left-color: var(--yellow); }
+.action-card.prep { border-left-color: var(--blue); }
+.action-card.normal { border-left-color: var(--text4); }
+.action-card.urgent { border-left-color: var(--red); }
+
+.action-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.action-desc {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.7;
+}
+
+.action-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: color 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.action-link:hover { color: var(--green); }
+
+/* ── MILESTONES ───────────────────────── */
+.milestone-card {
+  padding: 24px 28px;
+  margin-bottom: 16px;
+}
+
+.milestone-title-header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--text2);
+  margin-bottom: 24px;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: rgba(255,255,255,0.06);
+}
+
+.t-item {
+  position: relative;
+  padding: 14px 0;
+}
+
+.t-dot {
+  position: absolute;
+  left: -24px;
+  top: 19px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text4);
+  background: var(--bg);
+}
+
+.t-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.t-desc {
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.65;
+}
+
+.t-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.t-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text4);
+}
+
+.t-dd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text4);
+}
+
+/* ── MODELS BAR ───────────────────────── */
+.models-bar {
+  padding: 24px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.models-info {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text4);
+}
+
+.models-info span { color: var(--green); }
+
+.models-link {
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.models-link:hover { color: var(--text); }
+
+.footer {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text4);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">OrchardGuard</div>
+  <div class="nav-center">
+    <div class="nav-link active">Dashboard</div>
+    <div class="nav-link">Weather</div>
+    <div class="nav-link">Spray Log</div>
+    <div class="nav-link">Inventory</div>
+    <div class="nav-link">Models</div>
+    <div class="nav-link">Settings</div>
+  </div>
+  <div class="nav-status">
+    <div class="pulse"></div>
+    Nominal
+  </div>
+</nav>
+
+<div class="main">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <div class="orchard-name">Grills Orchards</div>
+        <div class="header-date">Monday, April 6, 2026</div>
+      </div>
+      <div class="health-gauge">
+        <svg viewBox="0 0 100 100">
+          <circle class="track" cx="50" cy="50" r="42"/>
+          <circle class="fill" cx="50" cy="50" r="42"/>
+        </svg>
+        <div class="health-score">
+          <div class="health-number">92</div>
+          <div class="health-label">Health</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP ROW -->
+  <div class="top-row">
+    <!-- Weather -->
+    <div class="glass weather-card">
+      <div class="weather-top">
+        <div>
+          <div class="weather-temp">0.9<span class="weather-unit">°</span></div>
+        </div>
+        <div class="weather-condition">
+          <div class="weather-desc">Cold · overcast</div>
+          <div class="weather-updated">7 min ago</div>
+        </div>
+      </div>
+      <div class="weather-grid">
+        <div class="w-stat">
+          <div class="w-stat-label">Humidity</div>
+          <div class="w-stat-value">81%</div>
+        </div>
+        <div class="w-stat">
+          <div class="w-stat-label">Precip 24h</div>
+          <div class="w-stat-value">0.3 mm</div>
+        </div>
+        <div class="w-stat">
+          <div class="w-stat-label">Wind</div>
+          <div class="w-stat-value">10.4 km/h</div>
+        </div>
+        <div class="w-stat">
+          <div class="w-stat-label">Dew Point</div>
+          <div class="w-stat-value">-2°C</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="glass status-card">
+      <div class="status-top">
+        <div class="status-icon clear">✓</div>
+        <div>
+          <div class="status-primary">All clear today</div>
+          <div class="status-secondary">No active infections or critical risks. Too cold for most disease and pest activity.</div>
+        </div>
+      </div>
+      <div class="status-actions">
+        <button class="btn">Update Stage</button>
+        <button class="btn">Log Spray</button>
+        <button class="btn">Scout</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOOM -->
+  <div class="glass bloom-card">
+    <div class="bloom-header">
+      <div class="bloom-title">Growth Stage</div>
+      <div class="bloom-current">Dormant</div>
+    </div>
+    <div class="bloom-track">
+      <div class="bloom-dot active"></div>
+      <div class="bloom-line glow"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+      <div class="bloom-line"></div>
+      <div class="bloom-dot"></div>
+    </div>
+    <div class="bloom-labels">
+      <div class="bloom-label active">Dormant</div>
+      <div class="bloom-label">Silver Tip</div>
+      <div class="bloom-label">Green Tip</div>
+      <div class="bloom-label">Tight Cluster</div>
+      <div class="bloom-label">Pink</div>
+      <div class="bloom-label">Bloom</div>
+      <div class="bloom-label">Petal Fall</div>
+      <div class="bloom-label">Fruit Set</div>
+    </div>
+  </div>
+
+  <!-- FORECAST -->
+  <div class="glass-static forecast-card section">
+    <div class="section-head">
+      <div class="section-title">7-Day Forecast</div>
+      <div class="section-sub">Open-Meteo</div>
+    </div>
+
+    <div class="f-row today">
+      <div class="f-day is-today">Today</div>
+      <div class="f-temps">5° <span class="f-low">0°</span></div>
+      <div class="f-precip">5.6mm</div>
+      <div class="f-risk"><span class="f-dot ok"></span> No risks</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Tomorrow</div>
+      <div class="f-temps">2° <span class="f-low">-6°</span></div>
+      <div class="f-precip">6.2mm</div>
+      <div class="f-risk"><span class="f-dot ok"></span> Cold rain — no disease concern</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Wednesday</div>
+      <div class="f-temps">6° <span class="f-low">-2°</span></div>
+      <div class="f-precip">—</div>
+      <div class="f-risk"><span class="f-dot ok"></span> Dry — good fieldwork day</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Thursday</div>
+      <div class="f-temps">13° <span class="f-low">4°</span></div>
+      <div class="f-precip">—</div>
+      <div class="f-risk"><span class="f-dot ok"></span> Mild and dry — ideal for pruning</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Friday</div>
+      <div class="f-temps">16° <span class="f-low">7°</span></div>
+      <div class="f-precip">1.6mm</div>
+      <div class="f-risk elevated"><span class="f-dot watch"></span> Warm + rain — monitor for green tip</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Saturday</div>
+      <div class="f-temps">12° <span class="f-low">5°</span></div>
+      <div class="f-precip">8.2mm</div>
+      <div class="f-risk elevated"><span class="f-dot watch"></span> Heavy rain — scab watch at green tip</div>
+    </div>
+    <div class="f-row">
+      <div class="f-day">Sunday</div>
+      <div class="f-temps">8° <span class="f-low">2°</span></div>
+      <div class="f-precip">—</div>
+      <div class="f-risk"><span class="f-dot ok"></span> Clearing — low risk</div>
+    </div>
+  </div>
+
+  <!-- THIS WEEK -->
+  <div class="actions-section">
+    <div class="actions-title">This Week</div>
+
+    <div class="glass action-card priority">
+      <div class="action-title">Finish dormant pruning</div>
+      <div class="action-desc">
+        Your pruning window closes at green tip — roughly 2–3 weeks away at current temps. 
+        Prioritize removing fire blight cankers. Cut 30cm beyond visible infection. 
+        Thursday is ideal at 13°C and dry.
+      </div>
+      <div class="action-link">Mark complete →</div>
+    </div>
+
+    <div class="glass action-card prep">
+      <div class="action-title">Plan dormant oil spray</div>
+      <div class="action-desc">
+        Apply at silver tip to smother overwintering mite eggs and scale. 
+        Needs a day above 4°C with no rain for 24 hours after application.
+      </div>
+      <div class="action-link">Check inventory →</div>
+    </div>
+
+    <div class="glass action-card prep">
+      <div class="action-title">Inspect deer fencing</div>
+      <div class="action-desc">
+        Spring browse risk is moderate. Buds attract deer as they begin to swell. 
+        Walk your fence line and repair winter damage.
+      </div>
+      <div class="action-link">Mark complete →</div>
+    </div>
+  </div>
+
+  <!-- MILESTONES -->
+  <div class="glass-static milestone-card">
+    <div class="milestone-title-header">Upcoming Milestones</div>
+    <div class="timeline">
+      <div class="t-item">
+        <div class="t-dot"></div>
+        <div class="t-name">Silver Tip</div>
+        <div class="t-desc">Copper spray window opens. Dormant oil deadline — must apply before green tissue shows.</div>
+        <div class="t-meta">
+          <div class="t-date">Est. April 12–16</div>
+          <div class="t-dd">~30 DD base 5°C</div>
+        </div>
+      </div>
+      <div class="t-item">
+        <div class="t-dot"></div>
+        <div class="t-name">Green Tip</div>
+        <div class="t-desc">Scab monitoring activates. Rosy apple aphid egg hatch. Update bloom stage when you see green at bud tips.</div>
+        <div class="t-meta">
+          <div class="t-date">Est. April 17–24</div>
+          <div class="t-dd">~55 DD base 5°C</div>
+        </div>
+      </div>
+      <div class="t-item">
+        <div class="t-dot"></div>
+        <div class="t-name">Tight Cluster</div>
+        <div class="t-desc">Powdery mildew risk increases. Begin protectant fungicide program if scab pressure is present.</div>
+        <div class="t-meta">
+          <div class="t-date">Est. late April</div>
+          <div class="t-dd">~100 DD base 5°C</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODELS -->
+  <div class="models-bar">
+    <div class="models-info"><span>55</span> models active · 47 dormant · all nominal</div>
+    <div class="models-link">View all models →</div>
+  </div>
+
+  <div class="footer">OrchardGuard · v1.0</div>
+
+</div>
+
+</body>
+</html>
