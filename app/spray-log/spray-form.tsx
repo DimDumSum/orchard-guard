@@ -155,7 +155,7 @@ export function SprayForm() {
               id="spray-rate"
               value={rate}
               onChange={(e) => setRate(e.target.value)}
-              placeholder="e.g. 2 L/ha"
+              placeholder="e.g. 2 L/ha or 0.2 gal/ac"
             />
           </div>
 

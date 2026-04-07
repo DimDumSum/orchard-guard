@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { getOrchard, getWeatherRange } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
+import { toImperial } from "@/lib/units";
 import {
   Table,
   TableBody,
@@ -52,18 +53,18 @@ function ForecastInterpretation({ forecast }: { forecast: Array<{ timestamp: str
   function interpretDay(day: { high: number; low: number; precip: number }, isFirst: boolean): string {
     const parts: string[] = [];
     if (day.precip > 5) {
-      parts.push(`Rain forecast (${day.precip.toFixed(0)} mm)`);
+      parts.push(`Rain forecast (${day.precip.toFixed(0)}\u00A0mm / ${toImperial(day.precip, "rainfall").toFixed(1)}\u00A0in)`);
     } else if (day.precip > 0.5) {
-      parts.push(`Light rain possible (${day.precip.toFixed(1)} mm)`);
+      parts.push(`Light rain possible (${day.precip.toFixed(1)}\u00A0mm / ${toImperial(day.precip, "rainfall").toFixed(2)}\u00A0in)`);
     } else {
       parts.push("Dry conditions");
     }
 
     if (day.high > 20) parts.push("warm temperatures");
-    else if (day.high > 10) parts.push(`highs reaching ${day.high.toFixed(0)}\u00B0C`);
-    else parts.push(`cool, high of ${day.high.toFixed(0)}\u00B0C`);
+    else if (day.high > 10) parts.push(`highs reaching ${day.high.toFixed(0)}\u00B0C (${toImperial(day.high, "temperature").toFixed(0)}\u00B0F)`);
+    else parts.push(`cool, high of ${day.high.toFixed(0)}\u00B0C (${toImperial(day.high, "temperature").toFixed(0)}\u00B0F)`);
 
-    if (day.low <= -2) parts.push("\u2014 frost risk overnight");
+    if (day.low <= -2) parts.push(`\u2014 frost risk overnight (${day.low.toFixed(0)}\u00B0C / ${toImperial(day.low, "temperature").toFixed(0)}\u00B0F)`);
     else if (day.low <= 2) parts.push("\u2014 near-freezing overnight");
 
     return parts.join(", ") + ".";
@@ -198,8 +199,13 @@ export default function WeatherPage() {
               <div>
                 <p className="font-data text-5xl font-bold">
                   {current.temp_c != null ? current.temp_c.toFixed(1) : "--"}
+                  <span className="text-2xl font-semibold text-muted-foreground">&deg;C</span>
                 </p>
-                <p className="text-caption text-muted-foreground">&deg;C</p>
+                {current.temp_c != null && (
+                  <p className="text-[14px] text-muted-foreground font-data">
+                    {toImperial(current.temp_c, "temperature").toFixed(1)}&deg;F
+                  </p>
+                )}
               </div>
             </div>
 
@@ -221,7 +227,12 @@ export default function WeatherPage() {
                     ? current.precip_mm.toFixed(1)
                     : "--"}
                 </p>
-                <p className="text-caption text-muted-foreground">Precip mm</p>
+                <p className="text-caption text-muted-foreground">mm</p>
+                {current.precip_mm != null && (
+                  <p className="text-[11px] text-muted-foreground/70 font-data">
+                    {toImperial(current.precip_mm, "rainfall").toFixed(2)}&nbsp;in
+                  </p>
+                )}
               </div>
               <div className="flex flex-col items-center rounded-xl bg-secondary/50 p-4">
                 <Wind className="mb-2 h-7 w-7 text-primary" />
@@ -230,7 +241,12 @@ export default function WeatherPage() {
                     ? current.wind_kph.toFixed(1)
                     : "--"}
                 </p>
-                <p className="text-caption text-muted-foreground">Wind km/h</p>
+                <p className="text-caption text-muted-foreground">km/h</p>
+                {current.wind_kph != null && (
+                  <p className="text-[11px] text-muted-foreground/70 font-data">
+                    {toImperial(current.wind_kph, "windSpeed").toFixed(1)}&nbsp;mph
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -309,10 +325,10 @@ export default function WeatherPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date / Time</TableHead>
-                  <TableHead>Temp (&deg;C)</TableHead>
+                  <TableHead>Temp (&deg;C/&deg;F)</TableHead>
                   <TableHead>Humidity (%)</TableHead>
-                  <TableHead>Precip (mm)</TableHead>
-                  <TableHead>Wind (km/h)</TableHead>
+                  <TableHead>Precip (mm/in)</TableHead>
+                  <TableHead>Wind (km/h / mph)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -348,7 +364,9 @@ export default function WeatherPage() {
                         </span>
                       </TableCell>
                       <TableCell className="font-data">
-                        {h.temp_c != null ? h.temp_c.toFixed(1) : "--"}
+                        {h.temp_c != null ? (
+                          <>{h.temp_c.toFixed(1)} <span className="text-muted-foreground">/ {toImperial(h.temp_c, "temperature").toFixed(0)}</span></>
+                        ) : "--"}
                       </TableCell>
                       <TableCell className="font-data">
                         {h.humidity_pct != null
@@ -356,10 +374,14 @@ export default function WeatherPage() {
                           : "--"}
                       </TableCell>
                       <TableCell className="font-data">
-                        {h.precip_mm != null ? h.precip_mm.toFixed(1) : "--"}
+                        {h.precip_mm != null ? (
+                          <>{h.precip_mm.toFixed(1)} <span className="text-muted-foreground">/ {toImperial(h.precip_mm, "rainfall").toFixed(2)}</span></>
+                        ) : "--"}
                       </TableCell>
                       <TableCell className="font-data">
-                        {h.wind_kph != null ? h.wind_kph.toFixed(1) : "--"}
+                        {h.wind_kph != null ? (
+                          <>{h.wind_kph.toFixed(1)} <span className="text-muted-foreground">/ {toImperial(h.wind_kph, "windSpeed").toFixed(0)}</span></>
+                        ) : "--"}
                       </TableCell>
                     </TableRow>
                   );

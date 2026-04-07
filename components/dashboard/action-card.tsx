@@ -3,6 +3,7 @@
 import React, { useState } from "react"
 import { ChevronDown, ChevronUp, Clock, Shield, AlertTriangle, CheckSquare, Eye } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toImperial } from "@/lib/units"
 import type { ActionCard as ActionCardData, ProductRecommendation, ForecastRiskLevel } from "@/lib/forecast/types"
 
 interface ActionCardProps {
@@ -50,14 +51,19 @@ function ProductCard({ product }: { product: ProductRecommendation }) {
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-bark-600 font-data">
         {product.ratePerHectare && (
-          <span>Rate: {product.ratePerHectare} {product.rateUnit ?? ""}/ha</span>
+          <span>
+            Rate: {product.ratePerHectare} {product.rateUnit ?? ""}/ha{" "}
+            <span className="text-bark-400">
+              ({(parseFloat(String(product.ratePerHectare)) * toImperial(1, "sprayRateVolume")).toFixed(1)} {product.rateUnit ?? ""}/ac)
+            </span>
+          </span>
         )}
         {product.kickbackHours != null && product.kickbackHours > 0 && (
           <span>Kickback: up to {product.kickbackHours}h</span>
         )}
         {product.phiDays != null && <span>PHI: {product.phiDays} days</span>}
         {product.reiHours != null && <span>REI: {product.reiHours}h</span>}
-        {product.costPerHectare != null && <span>~${product.costPerHectare.toFixed(0)}/ha</span>}
+        {product.costPerHectare != null && <span>~${product.costPerHectare.toFixed(0)}/ha <span className="text-bark-400">(${(product.costPerHectare / 2.47105).toFixed(0)}/ac)</span></span>}
       </div>
 
       {product.note && (

@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { toImperial } from "@/lib/units"
 
 interface ForecastRow {
   date: string
@@ -53,10 +54,10 @@ export function ScabForecastTable({ rows }: { rows: ForecastRow[] }) {
                   {isToday ? "Today" : row.dayName}
                 </TableCell>
                 <TableCell className="text-right font-data text-[13px]">
-                  {row.meanTemp}°C
+                  {row.meanTemp}°C <span className="text-muted-foreground">({toImperial(row.meanTemp, "temperature").toFixed(0)}°F)</span>
                 </TableCell>
                 <TableCell className="text-right font-data text-[13px]">
-                  {row.precip > 0 ? `${row.precip}mm` : "0mm"}
+                  {row.precip > 0 ? <>{row.precip}mm <span className="text-muted-foreground">({toImperial(row.precip, "rainfall").toFixed(2)}in)</span></> : "0mm"}
                 </TableCell>
                 <TableCell className="text-right font-data text-[13px]">
                   {row.estWetHrs > 0 ? `~${row.estWetHrs}h` : "0"}

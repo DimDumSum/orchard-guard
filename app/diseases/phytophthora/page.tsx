@@ -1,5 +1,6 @@
 import { Shrub, Droplets, Thermometer } from "lucide-react";
 import { getOrchard, getDailyWeather } from "@/lib/db";
+import { toImperial } from "@/lib/units";
 import { evaluatePhytophthora } from "@/lib/models/phytophthora";
 import {
   DetailHeader,
@@ -123,12 +124,12 @@ export default function PhytophthoraPage() {
           />
           <StatBox
             label="Est. Soil Temperature"
-            value={`${result.estimatedSoilTemp}°C`}
-            sub={soilActive ? "Active (>10°C)" : "Inactive (<10°C)"}
+            value={`${result.estimatedSoilTemp}°C (${toImperial(result.estimatedSoilTemp, "temperature").toFixed(0)}°F)`}
+            sub={soilActive ? "Active (>10°C / 50°F)" : "Inactive (<10°C / 50°F)"}
           />
           <StatBox
             label="Activation Threshold"
-            value="10°C"
+            value="10°C (50°F)"
             sub="Soil temp for Phytophthora"
           />
         </div>
@@ -142,7 +143,7 @@ export default function PhytophthoraPage() {
         <div className="space-y-3">
           <ConditionDot
             met={soilActive}
-            label={`Soil temperature active for Phytophthora (est. ${result.estimatedSoilTemp}°C, needs >10°C)`}
+            label={`Soil temperature active for Phytophthora (est. ${result.estimatedSoilTemp}°C / ${toImperial(result.estimatedSoilTemp, "temperature").toFixed(0)}°F, needs >10°C / 50°F)`}
           />
           <ConditionDot
             met={result.consecutiveWetDays >= 2}

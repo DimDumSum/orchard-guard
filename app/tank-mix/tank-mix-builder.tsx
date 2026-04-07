@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { toImperial } from "@/lib/units"
+import { DualUnitInput } from "@/components/ui/dual-unit-input"
 import { useRouter } from "next/navigation"
 import {
   CheckCircle2,
@@ -564,39 +566,33 @@ export function TankMixBuilder({ products, savedTemplates }: TankMixBuilderProps
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="tank-size">Tank Size (L)</Label>
-              <Input
+              <Label htmlFor="tank-size">Tank Size</Label>
+              <DualUnitInput
                 id="tank-size"
-                type="number"
-                min="0"
-                step="1"
                 value={tankSize}
-                onChange={(e) => setTankSize(e.target.value)}
-                placeholder="e.g. 2000"
+                unitType="volume"
+                onChange={setTankSize}
+                placeholder="e.g. 2000 L or 528 gal"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="area">Area to Cover (ha)</Label>
-              <Input
+              <Label htmlFor="area">Area to Cover</Label>
+              <DualUnitInput
                 id="area"
-                type="number"
-                min="0"
-                step="0.1"
                 value={areaToCover}
-                onChange={(e) => setAreaToCover(e.target.value)}
-                placeholder="e.g. 5"
+                unitType="area"
+                onChange={setAreaToCover}
+                placeholder="e.g. 5 ha or 12.4 ac"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="water-rate">Water Volume Rate (L/ha)</Label>
-              <Input
+              <Label htmlFor="water-rate">Water Volume Rate</Label>
+              <DualUnitInput
                 id="water-rate"
-                type="number"
-                min="0"
-                step="50"
                 value={waterVolumeRate}
-                onChange={(e) => setWaterVolumeRate(e.target.value)}
-                placeholder="e.g. 1000"
+                unitType="sprayRateVolume"
+                onChange={setWaterVolumeRate}
+                placeholder="e.g. 1000 L/ha or 107 gal/ac"
               />
             </div>
           </div>
@@ -605,14 +601,14 @@ export function TankMixBuilder({ products, savedTemplates }: TankMixBuilderProps
             <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
               <p>
                 <strong>Total water needed:</strong>{" "}
-                {(areaHa * waterRate).toLocaleString()} L
+                {(areaHa * waterRate).toLocaleString()}&nbsp;L ({toImperial(areaHa * waterRate, "volume").toFixed(0)}&nbsp;gal)
               </p>
               <p>
                 <strong>Tanks needed:</strong> {tanksNeeded.toFixed(1)} loads
               </p>
               <p>
                 <strong>Area per tank:</strong>{" "}
-                {(tankSizeL / waterRate).toFixed(2)} ha
+                {(tankSizeL / waterRate).toFixed(2)}&nbsp;ha ({toImperial(tankSizeL / waterRate, "area").toFixed(2)}&nbsp;ac)
               </p>
             </div>
           )}

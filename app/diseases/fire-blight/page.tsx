@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { toImperial } from "@/lib/units";
 import { DegreeHourChart } from "./degree-hour-chart";
 import { ScoutingGuideSection } from "@/components/models/scouting-guide-section"
 import { ProductEfficacyTable } from "@/components/models/product-efficacy-table"
@@ -416,8 +417,8 @@ export default function FireBlightPage() {
                       {rows.map((r) => (
                         <tr key={r.date} className="border-b last:border-0">
                           <td className="py-2 text-[13px]">{r.date === todayStr ? "Today" : r.dayName}</td>
-                          <td className="py-2 text-right font-data text-[13px]">{r.meanTemp}°C</td>
-                          <td className="py-2 text-right font-data text-[13px]">{r.precip > 0 ? `${r.precip}mm` : "\u2014"}</td>
+                          <td className="py-2 text-right font-data text-[13px]">{r.meanTemp}°C <span className="text-muted-foreground">({toImperial(r.meanTemp, "temperature").toFixed(0)}°F)</span></td>
+                          <td className="py-2 text-right font-data text-[13px]">{r.precip > 0 ? <>{r.precip}mm <span className="text-muted-foreground">({toImperial(r.precip, "rainfall").toFixed(2)}in)</span></> : "\u2014"}</td>
                           <td className="py-2 text-right font-data font-semibold text-[13px]">{r.projectedDH}</td>
                           <td className={cn("py-2 pl-3 text-[12px] font-bold uppercase", r.riskColor)}>{r.risk}</td>
                           <td className="py-2 text-[13px] text-muted-foreground">{r.note}{r.precip > 0 ? " + rain" : ""}</td>

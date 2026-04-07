@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Droplets, TrendingDown, CloudRain, Activity } from "lucide-react"
+import { toImperial } from "@/lib/units"
 import {
   getOrchard,
   getIrrigationConfig,
@@ -183,14 +184,17 @@ export default async function IrrigationPage() {
               <div>
                 <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">ET (crop use)</p>
                 <p className="font-data text-[20px] text-bark-600">{data.todayEtMm} <span className="text-[12px] text-bark-300">mm</span></p>
+                <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.todayEtMm, "rainfall").toFixed(2)}&nbsp;in</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Rainfall 24h</p>
                 <p className="font-data text-[20px] text-bark-600">{data.rain24hMm} <span className="text-[12px] text-bark-300">mm</span></p>
+                <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.rain24hMm, "rainfall").toFixed(2)}&nbsp;in</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Soil water</p>
                 <p className="font-data text-[20px] text-bark-600">{data.soilWaterMm} <span className="text-[12px] text-bark-300">/ {data.availableWaterMm} mm</span></p>
+                <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.soilWaterMm, "rainfall").toFixed(1)} / {toImperial(data.availableWaterMm, "rainfall").toFixed(1)}&nbsp;in</p>
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Next irrigation</p>
@@ -209,8 +213,8 @@ export default async function IrrigationPage() {
               <p className="text-[11px] text-bark-300">
                 {SOIL_TYPE_LABELS[config.soil_type]} &middot;{" "}
                 {IRRIGATION_TYPE_LABELS[config.irrigation_type]} &middot;{" "}
-                {config.irrigation_rate_mm_per_hour} mm/hr &middot;{" "}
-                {config.root_depth_cm}cm root zone
+                {config.irrigation_rate_mm_per_hour}&nbsp;mm/hr ({toImperial(config.irrigation_rate_mm_per_hour, "irrigationRate").toFixed(2)}&nbsp;in/hr) &middot;{" "}
+                {config.root_depth_cm}&nbsp;cm ({toImperial(config.root_depth_cm, "lengthSmall").toFixed(1)}&nbsp;in) root zone
               </p>
             </div>
           </div>
@@ -235,7 +239,7 @@ export default async function IrrigationPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-bark-400">Apply</p>
-                  <p className="font-data text-[14px] text-bark-600">{data.recommendation.grossAmountMm} mm</p>
+                  <p className="font-data text-[14px] text-bark-600">{data.recommendation.grossAmountMm}&nbsp;mm ({toImperial(data.recommendation.grossAmountMm, "rainfall").toFixed(2)}&nbsp;in)</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-bark-400">Run time</p>
@@ -243,11 +247,11 @@ export default async function IrrigationPage() {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-bark-400">Volume</p>
-                  <p className="font-data text-[14px] text-bark-600">{data.recommendation.volumeM3PerHa} m&sup3;/ha</p>
+                  <p className="font-data text-[14px] text-bark-600">{data.recommendation.volumeM3PerHa}&nbsp;m&sup3;/ha ({(data.recommendation.volumeM3PerHa / 2.47105).toFixed(1)}&nbsp;m&sup3;/ac)</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-bark-400">Est. cost</p>
-                  <p className="font-data text-[14px] text-bark-600">${data.recommendation.costPerHa}/ha</p>
+                  <p className="font-data text-[14px] text-bark-600">${data.recommendation.costPerHa}/ha (${(data.recommendation.costPerHa / 2.47105).toFixed(2)}/ac)</p>
                 </div>
               </div>
             </div>
@@ -295,10 +299,10 @@ export default async function IrrigationPage() {
                       {isToday ? "Today" : day.dayName}
                     </span>
                     <span className="font-data text-[12px] text-bark-400 text-right">
-                      {day.rainMm > 0 ? `${day.rainMm}mm` : "—"}
+                      {day.rainMm > 0 ? <>{day.rainMm}mm <span className="text-bark-300">({toImperial(day.rainMm, "rainfall").toFixed(2)}in)</span></> : "—"}
                     </span>
                     <span className="font-data text-[12px] text-bark-400 text-right">
-                      {day.etMm}mm
+                      {day.etMm}mm <span className="text-bark-300">({toImperial(day.etMm, "rainfall").toFixed(2)}in)</span>
                     </span>
                     <span className="font-data text-[12px] text-bark-600 text-right">
                       {day.soilWaterMm}mm
@@ -336,14 +340,17 @@ export default async function IrrigationPage() {
             <div>
               <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Rainfall</p>
               <p className="font-data text-[20px] text-bark-600">{data.seasonRainMm} <span className="text-[12px] text-bark-300">mm</span></p>
+              <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.seasonRainMm, "rainfall").toFixed(1)}&nbsp;in</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Irrigated</p>
               <p className="font-data text-[20px] text-bark-600">{data.seasonIrrigationMm} <span className="text-[12px] text-bark-300">mm</span></p>
+              <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.seasonIrrigationMm, "rainfall").toFixed(1)}&nbsp;in</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[1.5px] text-bark-400 mb-1">Crop ET</p>
               <p className="font-data text-[20px] text-bark-600">{data.seasonEtMm} <span className="text-[12px] text-bark-300">mm</span></p>
+              <p className="text-[10px] text-bark-300 mt-0.5">{toImperial(data.seasonEtMm, "rainfall").toFixed(1)}&nbsp;in</p>
             </div>
           </div>
           <div className="border-t border-border mt-4 pt-3">
@@ -351,7 +358,7 @@ export default async function IrrigationPage() {
               Balance:{" "}
               <span className="font-data font-medium text-bark-600">
                 {data.seasonRainMm + data.seasonIrrigationMm - data.seasonEtMm > 0 ? "+" : ""}
-                {Math.round((data.seasonRainMm + data.seasonIrrigationMm - data.seasonEtMm) * 10) / 10} mm
+                {Math.round((data.seasonRainMm + data.seasonIrrigationMm - data.seasonEtMm) * 10) / 10}&nbsp;mm ({toImperial(Math.round((data.seasonRainMm + data.seasonIrrigationMm - data.seasonEtMm) * 10) / 10, "rainfall").toFixed(1)}&nbsp;in)
               </span>
               {" "}{data.seasonRainMm + data.seasonIrrigationMm >= data.seasonEtMm
                 ? "(supply meets demand)"
@@ -398,7 +405,7 @@ export default async function IrrigationPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-data text-[14px] text-bark-600">{entry.amount_mm} mm</p>
+                      <p className="font-data text-[14px] text-bark-600">{entry.amount_mm}&nbsp;mm ({toImperial(entry.amount_mm, "rainfall").toFixed(2)}&nbsp;in)</p>
                       <p className="text-[11px] text-bark-300">${entry.cost?.toFixed(2) ?? "—"}</p>
                     </div>
                   </div>

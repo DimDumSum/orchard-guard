@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from "react"
 import { RefreshCw } from "lucide-react"
+import { toImperial } from "@/lib/units"
 
 interface WeatherSummaryProps {
   temp: number | null
@@ -108,8 +109,13 @@ export function WeatherSummary({
         <div>
           <span className="font-data text-[54px] font-light leading-none text-bark-900">
             {temp !== null ? temp : "--"}
-            <span className="text-[22px] text-bark-400">&deg;</span>
+            <span className="text-[22px] text-bark-400">&deg;C</span>
           </span>
+          {temp !== null && (
+            <p className="font-data text-[16px] text-bark-400 mt-0.5">
+              {toImperial(temp, "temperature").toFixed(1)}&deg;F
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-[14px] text-bark-600">
@@ -151,9 +157,21 @@ export function WeatherSummary({
       {/* 2x2 stat grid */}
       <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
         <StatItem label="Humidity" value={humidity !== null ? `${humidity}%` : "--"} />
-        <StatItem label="Precip 24h" value={precip !== null ? `${precip} mm` : "--"} />
-        <StatItem label="Wind" value={wind !== null ? `${wind} km/h` : "--"} />
-        <StatItem label="Dew Point" value={dewPoint !== null ? `${dewPoint}\u00b0C` : "--"} />
+        <StatItem
+          label="Precip 24h"
+          value={precip !== null ? `${precip} mm` : "--"}
+          secondary={precip !== null ? `${toImperial(precip, "rainfall").toFixed(2)} in` : undefined}
+        />
+        <StatItem
+          label="Wind"
+          value={wind !== null ? `${wind} km/h` : "--"}
+          secondary={wind !== null ? `${toImperial(wind, "windSpeed").toFixed(1)} mph` : undefined}
+        />
+        <StatItem
+          label="Dew Point"
+          value={dewPoint !== null ? `${dewPoint}\u00b0C` : "--"}
+          secondary={dewPoint !== null ? `${toImperial(dewPoint, "temperature").toFixed(1)}\u00b0F` : undefined}
+        />
       </div>
 
       {/* Coordinates */}
@@ -166,7 +184,7 @@ export function WeatherSummary({
   )
 }
 
-function StatItem({ label, value }: { label: string; value: string }) {
+function StatItem({ label, value, secondary }: { label: string; value: string; secondary?: string }) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-[1.5px] text-bark-300 mb-1">
@@ -175,6 +193,11 @@ function StatItem({ label, value }: { label: string; value: string }) {
       <p className="font-data text-[16px] text-bark-600">
         {value}
       </p>
+      {secondary && (
+        <p className="font-data text-[11px] text-bark-300 mt-0.5">
+          {secondary}
+        </p>
+      )}
     </div>
   )
 }

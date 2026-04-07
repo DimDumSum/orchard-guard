@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DualUnitInput } from "@/components/ui/dual-unit-input"
 import {
   Select,
   SelectTrigger,
@@ -833,7 +834,7 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
                       {block.block_name}
                     </h3>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-bark-400 mt-0.5">
-                      {block.total_area_ha && <span>{block.total_area_ha} ha</span>}
+                      {block.total_area_ha && <span>{block.total_area_ha}&nbsp;ha ({(block.total_area_ha * 2.47105).toFixed(1)}&nbsp;ac)</span>}
                       {block.soil_type && <span>{BLOCK_SOIL_TYPES.find((s) => s.value === block.soil_type)?.label ?? block.soil_type}</span>}
                       {block.irrigation_system && <span>{BLOCK_IRRIGATION_TYPES.find((t) => t.value === block.irrigation_system)?.label ?? block.irrigation_system}</span>}
                       {block.year_established && <span>Est. {block.year_established}</span>}
@@ -891,7 +892,7 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
                             {planting.rows_description && <span>{planting.rows_description}</span>}
                             {planting.planted_year && <span>Planted {planting.planted_year}</span>}
                             {planting.spacing_in_row_m && planting.spacing_between_rows_m && (
-                              <span>{planting.spacing_in_row_m}m &times; {planting.spacing_between_rows_m}m</span>
+                              <span>{planting.spacing_in_row_m}&nbsp;m &times; {planting.spacing_between_rows_m}&nbsp;m ({(planting.spacing_in_row_m * 3.28084).toFixed(1)}&nbsp;ft &times; {(planting.spacing_between_rows_m * 3.28084).toFixed(1)}&nbsp;ft)</span>
                             )}
                           </div>
                           {traits.length > 0 && (
@@ -988,14 +989,12 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Total Area (ha)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min={0.01}
+                <Label>Total Area</Label>
+                <DualUnitInput
                   value={totalAreaHa}
-                  onChange={(e) => setTotalAreaHa(e.target.value)}
-                  placeholder="e.g. 2.4"
+                  unitType="area"
+                  onChange={setTotalAreaHa}
+                  placeholder="e.g. 2.4 ha or 5.9 ac"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1097,12 +1096,12 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Spacing In Row (m)</Label>
-                <Input type="number" step="0.1" min={0.1} value={spacingInRow} onChange={(e) => setSpacingInRow(e.target.value)} placeholder="e.g. 1.0" />
+                <Label>Spacing In Row</Label>
+                <DualUnitInput value={spacingInRow} unitType="length" onChange={setSpacingInRow} placeholder="e.g. 1.0 m or 3.3 ft" />
               </div>
               <div className="space-y-1.5">
-                <Label>Between Rows (m)</Label>
-                <Input type="number" step="0.1" min={0.1} value={spacingBetweenRows} onChange={(e) => setSpacingBetweenRows(e.target.value)} placeholder="e.g. 4.0" />
+                <Label>Between Rows</Label>
+                <DualUnitInput value={spacingBetweenRows} unitType="length" onChange={setSpacingBetweenRows} placeholder="e.g. 4.0 m or 13 ft" />
               </div>
             </div>
 
@@ -1498,8 +1497,8 @@ export function SettingsForm({
                       <Input id="lon" type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="elev" className="text-[11px] text-bark-400">Elevation (m)</Label>
-                      <Input id="elev" type="number" step="any" value={elevation} onChange={(e) => setElevation(e.target.value)} />
+                      <Label htmlFor="elev" className="text-[11px] text-bark-400">Elevation</Label>
+                      <DualUnitInput id="elev" value={elevation} unitType="elevation" onChange={setElevation} placeholder="e.g. 200 m or 656 ft" />
                     </div>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={handleGeolocation} disabled={geoLoading} className="gap-2">
@@ -1654,8 +1653,8 @@ export function SettingsForm({
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="rootDepth">Root Depth (cm)</Label>
-                        <Input id="rootDepth" type="number" min="30" max="120" step="5" value={rootDepth} onChange={(e) => setRootDepth(e.target.value)} />
+                        <Label htmlFor="rootDepth">Root Depth</Label>
+                        <DualUnitInput id="rootDepth" value={rootDepth} unitType="lengthSmall" onChange={setRootDepth} placeholder="e.g. 60 cm or 24 in" />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="mad">Irrigation Trigger (%)</Label>
@@ -1665,8 +1664,8 @@ export function SettingsForm({
 
                     <div className="rounded-lg bg-secondary/50 px-4 py-3">
                       <p className="text-[12px] text-bark-400">
-                        Available water: <span className="font-data font-medium text-bark-600">{availableWaterMm} mm</span>
-                        {" "}&middot; Trigger at <span className="font-data font-medium text-bark-600">{triggerMm} mm</span> depleted
+                        Available water: <span className="font-data font-medium text-bark-600">{availableWaterMm}&nbsp;mm ({(availableWaterMm / 25.4).toFixed(1)}&nbsp;in)</span>
+                        {" "}&middot; Trigger at <span className="font-data font-medium text-bark-600">{triggerMm}&nbsp;mm ({(triggerMm / 25.4).toFixed(2)}&nbsp;in)</span> depleted
                       </p>
                     </div>
 
@@ -1682,23 +1681,23 @@ export function SettingsForm({
 
                     <div className="grid gap-4 sm:grid-cols-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="irrigRate">Rate (mm/hr)</Label>
-                        <Input id="irrigRate" type="number" step="0.5" value={irrigRate} onChange={(e) => setIrrigRate(e.target.value)} />
+                        <Label htmlFor="irrigRate">Rate</Label>
+                        <DualUnitInput id="irrigRate" value={irrigRate} unitType="irrigationRate" onChange={setIrrigRate} placeholder="e.g. 4 mm/hr or 0.16 in/hr" />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="waterCost">Water Cost ($/m&sup3;)</Label>
                         <Input id="waterCost" type="number" step="0.01" value={waterCost} onChange={(e) => setWaterCost(e.target.value)} />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="blockArea">Block Area (ha)</Label>
-                        <Input id="blockArea" type="number" step="0.1" value={blockArea} onChange={(e) => setBlockArea(e.target.value)} />
+                        <Label htmlFor="blockArea">Block Area</Label>
+                        <DualUnitInput id="blockArea" value={blockArea} unitType="area" onChange={setBlockArea} placeholder="e.g. 1.0 ha or 2.5 ac" />
                       </div>
                     </div>
 
                     <div className="rounded-lg bg-secondary/50 px-4 py-3">
                       <p className="text-[12px] text-bark-400">
                         Efficiency: <span className="font-data font-medium text-bark-600">{Math.round(efficiency * 100)}%</span>
-                        {" "}&middot; Gross to refill: <span className="font-data font-medium text-bark-600">{Math.round((triggerMm / efficiency) * 10) / 10} mm</span>
+                        {" "}&middot; Gross to refill: <span className="font-data font-medium text-bark-600">{Math.round((triggerMm / efficiency) * 10) / 10}&nbsp;mm ({(Math.round((triggerMm / efficiency) * 10) / 10 / 25.4).toFixed(2)}&nbsp;in)</span>
                         {parseFloat(irrigRate) > 0 && (
                           <>
                             {" "}&middot; <span className="font-data font-medium text-bark-600">
