@@ -301,8 +301,11 @@ function forecastFrostDay(
 ): ForecastDayRisk | null {
   const thresholds = FROST_THRESHOLDS[bloomStage] ?? FROST_THRESHOLDS.dormant
   const low = day.min_temp ?? 0
+  const margin = low - thresholds.kill10
+  const stageLabel = bloomStage.replace(/-/g, " ")
 
-  if (low > thresholds.kill10 + 5) return null // well above
+  // Only flag frost as a risk when within 3°C of kill threshold
+  if (margin > 3) return null
 
   let riskLevel: ForecastRiskLevel = "low"
   let summary = ""
@@ -310,19 +313,26 @@ function forecastFrostDay(
 
   if (low <= thresholds.kill90) {
     riskLevel = "critical"
-    summary = `Forecast low ${low.toFixed(0)}°C is at or below 90% kill threshold (${thresholds.kill90}°C) for ${bloomStage}.`
+    summary = `Forecast low ${low.toFixed(1)}°C is at or below 90% kill threshold (${thresholds.kill90}°C) for ${stageLabel} stage. Severe bud damage expected.`
     action = "Deploy all frost protection immediately — wind machines, heaters, overhead irrigation."
   } else if (low <= thresholds.kill10) {
     riskLevel = "high"
-    summary = `Forecast low ${low.toFixed(0)}°C is at or below 10% kill threshold (${thresholds.kill10}°C) for ${bloomStage}.`
+    summary = `Forecast low ${low.toFixed(1)}°C reaches the 10% kill threshold (${thresholds.kill10}°C) for ${stageLabel} stage. Bud damage likely.`
     action = "Protect with overhead irrigation or wind machines if available."
-  } else if (low <= thresholds.kill10 + 2) {
+  } else if (margin <= 2) {
     riskLevel = "moderate"
-    summary = `Forecast low ${low.toFixed(0)}°C is within ${(low - thresholds.kill10).toFixed(0)}°C of damage threshold for ${bloomStage}.`
+    summary = `Forecast low ${low.toFixed(1)}°C is ${margin.toFixed(0)}°C above the kill threshold (${thresholds.kill10}°C) for ${stageLabel} stage. Close to danger.`
     action = "Monitor overnight temperatures. Have protection ready."
   } else {
-    summary = `Cool overnight (${low.toFixed(0)}°C) but safe — ${(low - thresholds.kill10).toFixed(0)}°C above damage threshold.`
-    return null
+    // Within 3°C but > 2°C — low concern, include informational context
+    summary = `Frost overnight (${low.toFixed(1)}°C) — no concern at ${stageLabel} stage. Kill threshold is ${thresholds.kill10}°C.`
+    return {
+      model: "frostRisk",
+      modelTitle: "Frost Risk",
+      riskLevel: "low",
+      summary,
+      action: null,
+    }
   }
 
   return {

@@ -22,7 +22,6 @@ import { enrichCardsWithForecast } from "@/lib/forecast/enrich-cards"
 import { WeatherSummary } from "@/components/dashboard/weather-summary"
 import { BloomStageCard } from "@/components/dashboard/bloom-stage-card"
 import { ForecastStrip } from "@/components/dashboard/forecast-strip"
-import { WeekAhead } from "@/components/dashboard/week-ahead"
 import { ActionCardComponent } from "@/components/dashboard/action-card"
 import { SprayDays } from "@/components/dashboard/spray-days"
 import { FireBlightBloomForecast } from "@/components/dashboard/fire-blight-bloom-forecast"
@@ -217,6 +216,19 @@ export default async function DashboardPage() {
     .filter((h) => new Date(h.timestamp).getTime() >= twentyFourHoursAgo.getTime())
     .reduce((sum, h) => sum + (h.precip_mm ?? 0), 0)
 
+  // Frost thresholds for current bloom stage
+  const FROST_THRESHOLDS: Record<string, { kill10: number; kill90: number }> = {
+    dormant: { kill10: -17, kill90: -25 },
+    "silver-tip": { kill10: -12, kill90: -17 },
+    "green-tip": { kill10: -8, kill90: -12 },
+    "tight-cluster": { kill10: -5, kill90: -8 },
+    pink: { kill10: -3, kill90: -5 },
+    bloom: { kill10: -2, kill90: -3 },
+    "petal-fall": { kill10: -1, kill90: -2 },
+    "fruit-set": { kill10: -1, kill90: -2 },
+  }
+  const frostTh = FROST_THRESHOLDS[orchard.bloom_stage] ?? FROST_THRESHOLDS.dormant
+
   // Forecast strip
   const forecastStripDays: Array<{
     date: string; high: number; low: number; precip: number; icon: string; riskLevel: string
@@ -226,7 +238,11 @@ export default async function DashboardPage() {
     const low = day.min_temp != null ? r1(day.min_temp) : 0
     const precip = day.total_precip != null ? r1(day.total_precip) : 0
     const dayRisks: string[] = []
-    if (day.min_temp != null && day.min_temp <= -2) dayRisks.push("high")
+    // Only flag frost as a real risk when within 3°C of kill threshold for current stage
+    if (day.min_temp != null && day.min_temp <= frostTh.kill10 + 3) {
+      if (day.min_temp <= frostTh.kill10) dayRisks.push("high")
+      else dayRisks.push("moderate")
+    }
     if (precip > 5 && high > 10) dayRisks.push("moderate")
     if (dayRisks.length === 0) dayRisks.push("low")
     forecastStripDays.push({
@@ -260,8 +276,17 @@ export default async function DashboardPage() {
   const activeModels = primary.length
   const lowRiskActive = primary.filter((c) => !highRiskSet.has(c.riskLevel.toLowerCase())).length
 
-  // Health score
-  const healthScore = Math.max(0, Math.min(100, 100 - highRiskCount * 8 - (actionRequired.length * 5)))
+  // Health score breakdown
+  const activeInfections = actionRequired.length
+  const overdueSprayCount = unprotectedCoverage.length
+  const elevatedPestRisks = enrichedCards.filter((c) => {
+    const level = c.riskLevel.toLowerCase()
+    return (level === "moderate" || level === "high") &&
+      (c.title?.toLowerCase().includes("moth") || c.title?.toLowerCase().includes("mite") || c.title?.toLowerCase().includes("pest") || c.title?.toLowerCase().includes("aphid"))
+  }).length
+  const healthScore = Math.max(0, Math.min(100,
+    100 - highRiskCount * 8 - activeInfections * 5 - overdueSprayCount * 3 - elevatedPestRisks * 4
+  ))
 
   // Irrigation data — update daily balance
   try {
@@ -317,6 +342,9 @@ export default async function DashboardPage() {
             score={healthScore}
             highRiskCount={highRiskCount}
             totalModels={totalModels}
+            activeInfections={activeInfections}
+            overdueSprayCount={overdueSprayCount}
+            elevatedPestRisks={elevatedPestRisks}
           />
         </div>
       </div>
@@ -330,6 +358,8 @@ export default async function DashboardPage() {
           wind={latestHourly ? r1(latestHourly.wind_kph) : null}
           dewPoint={latestHourly ? r1(latestHourly.dew_point_c) : null}
           updatedAt={latestHourly?.timestamp ?? null}
+          latitude={orchard.latitude}
+          longitude={orchard.longitude}
         />
 
         {/* Status card */}
@@ -362,6 +392,12 @@ export default async function DashboardPage() {
               className="text-[12px] font-medium px-4 py-2.5 rounded-lg border border-border bg-card text-bark-600 hover:text-bark-900 hover:border-[var(--glass-border-hover)] transition-all cursor-pointer backdrop-blur-sm"
             >
               Log Spray
+            </a>
+            <a
+              href="/checklist"
+              className="text-[12px] font-medium px-4 py-2.5 rounded-lg border border-border bg-card text-bark-600 hover:text-bark-900 hover:border-[var(--glass-border-hover)] transition-all cursor-pointer backdrop-blur-sm"
+            >
+              Scout
             </a>
           </div>
         </div>
@@ -540,34 +576,16 @@ export default async function DashboardPage() {
       {/* 7-DAY FORECAST                                                   */}
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       {forecastStripDays.length > 0 && (
-        <ForecastStrip days={forecastStripDays} />
+        <ForecastStrip
+          days={forecastStripDays}
+          detailedDays={weekAhead.days}
+          bloomStage={orchard.bloom_stage}
+        />
       )}
 
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {/* COMING UP                                                        */}
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {(weekAhead.days.length > 0 || protectedCoverage.length > 0 || inactiveCoverage.length > 0) && (
-        <section>
-          <div className="flex items-center gap-2 mb-4 pt-2">
-            <span
-              className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg"
-              style={{ backgroundColor: 'var(--badge-blue-bg)', color: 'var(--badge-blue-text)', letterSpacing: '1.5px' }}
-            >
-              Coming Up
-            </span>
-            <span className="text-[12px] text-bark-300">next 7 days</span>
-          </div>
-
-          <div className="space-y-4">
-            {weekAhead.days.length > 0 && (
-              <WeekAhead days={weekAhead.days} />
-            )}
-
-            {(protectedCoverage.length > 0 || inactiveCoverage.length > 0) && (
-              <SprayCoverage coverage={[...protectedCoverage, ...inactiveCoverage]} />
-            )}
-          </div>
-        </section>
+      {/* Spray coverage (protected/inactive) */}
+      {(protectedCoverage.length > 0 || inactiveCoverage.length > 0) && (
+        <SprayCoverage coverage={[...protectedCoverage, ...inactiveCoverage]} />
       )}
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}

@@ -1,6 +1,7 @@
 "use client"
 
-import React from "react"
+import React, { useState, useCallback, useEffect } from "react"
+import { RefreshCw } from "lucide-react"
 
 interface WeatherSummaryProps {
   temp: number | null
@@ -9,12 +10,16 @@ interface WeatherSummaryProps {
   wind: number | null
   dewPoint: number | null
   updatedAt: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+function getAgeMs(dateString: string): number {
+  return Date.now() - new Date(dateString).getTime()
 }
 
 function formatTimeAgo(dateString: string): string {
-  const now = new Date()
-  const date = new Date(dateString)
-  const diffMs = now.getTime() - date.getTime()
+  const diffMs = getAgeMs(dateString)
   const diffMinutes = Math.floor(diffMs / 60000)
 
   if (diffMinutes < 1) return "Just now"
@@ -25,6 +30,7 @@ function formatTimeAgo(dateString: string): string {
   if (diffHours === 1) return "1 hr ago"
   if (diffHours < 24) return `${diffHours} hrs ago`
 
+  const date = new Date(dateString)
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -44,6 +50,14 @@ function getTempContext(temp: number | null): string {
   return "Hot \u00b7 heat stress possible"
 }
 
+function formatCoord(value: number, pos: string, neg: string): string {
+  const abs = Math.abs(value)
+  const dir = value >= 0 ? pos : neg
+  return `${abs.toFixed(2)}\u00b0${dir}`
+}
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+
 export function WeatherSummary({
   temp,
   humidity,
@@ -51,7 +65,42 @@ export function WeatherSummary({
   wind,
   dewPoint,
   updatedAt,
+  latitude,
+  longitude,
 }: WeatherSummaryProps) {
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<"success" | "error" | null>(null)
+
+  const isStale = updatedAt ? getAgeMs(updatedAt) > TWO_HOURS_MS : false
+
+  // Clear result message after a few seconds
+  useEffect(() => {
+    if (refreshResult) {
+      const t = setTimeout(() => setRefreshResult(null), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [refreshResult])
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    setRefreshResult(null)
+    try {
+      const res = await fetch("/api/weather/refresh")
+      if (res.ok) {
+        setRefreshResult("success")
+        // Reload page to pick up new data (server component)
+        setTimeout(() => window.location.reload(), 800)
+      } else {
+        setRefreshResult("error")
+      }
+    } catch {
+      setRefreshResult("error")
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing])
+
   return (
     <div className="rounded-xl border border-border bg-card card-shadow p-6">
       {/* Top row: big temp + description */}
@@ -67,9 +116,34 @@ export function WeatherSummary({
             {getTempContext(temp)}
           </p>
           {updatedAt && (
-            <p className="text-[11px] text-bark-300">
-              {formatTimeAgo(updatedAt)}
-            </p>
+            <div className="flex items-center gap-1.5 justify-end mt-0.5">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={`text-[11px] cursor-pointer hover:underline transition-colors ${
+                  isStale ? "text-risk-moderate font-medium" : "text-bark-300"
+                }`}
+                title="Click to refresh weather data"
+              >
+                {formatTimeAgo(updatedAt)}
+                {isStale && " — stale"}
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="text-bark-300 hover:text-bark-600 transition-colors cursor-pointer"
+                title="Refresh now"
+                aria-label="Refresh weather data"
+              >
+                <RefreshCw className={`size-3 ${refreshing ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+          )}
+          {refreshResult === "success" && (
+            <p className="text-[10px] text-primary mt-0.5">Updated</p>
+          )}
+          {refreshResult === "error" && (
+            <p className="text-[10px] text-risk-high mt-0.5">Refresh failed</p>
           )}
         </div>
       </div>
@@ -81,6 +155,13 @@ export function WeatherSummary({
         <StatItem label="Wind" value={wind !== null ? `${wind} km/h` : "--"} />
         <StatItem label="Dew Point" value={dewPoint !== null ? `${dewPoint}\u00b0C` : "--"} />
       </div>
+
+      {/* Coordinates */}
+      {latitude != null && longitude != null && (
+        <p className="text-[10px] text-bark-300 mt-3 pt-3 border-t border-border">
+          Weather for {formatCoord(latitude, "N", "S")}, {formatCoord(longitude, "E", "W")}
+        </p>
+      )}
     </div>
   )
 }

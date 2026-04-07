@@ -1,19 +1,43 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-interface ForecastDay {
-  date: string
-  high: number
-  low: number
-  precip: number
-  icon: string
-  riskLevel: string
-}
+import type { ForecastDaySummary, ForecastRiskLevel } from "@/lib/forecast/types"
 
 interface ForecastStripProps {
-  days: ForecastDay[]
+  days: Array<{
+    date: string
+    high: number
+    low: number
+    precip: number
+    icon: string
+    riskLevel: string
+  }>
+  detailedDays: ForecastDaySummary[]
+  bloomStage: string
+}
+
+const FROST_THRESHOLDS: Record<string, { kill10: number; kill90: number }> = {
+  dormant: { kill10: -17, kill90: -25 },
+  "silver-tip": { kill10: -12, kill90: -17 },
+  "green-tip": { kill10: -8, kill90: -12 },
+  "tight-cluster": { kill10: -5, kill90: -8 },
+  pink: { kill10: -3, kill90: -5 },
+  bloom: { kill10: -2, kill90: -3 },
+  "petal-fall": { kill10: -1, kill90: -2 },
+  "fruit-set": { kill10: -1, kill90: -2 },
+}
+
+const BLOOM_LABELS: Record<string, string> = {
+  dormant: "dormant",
+  "silver-tip": "silver tip",
+  "green-tip": "green tip",
+  "tight-cluster": "tight cluster",
+  pink: "pink",
+  bloom: "bloom",
+  "petal-fall": "petal fall",
+  "fruit-set": "fruit set",
 }
 
 const dotColor: Record<string, string> = {
@@ -24,6 +48,13 @@ const dotColor: Record<string, string> = {
   high: "bg-risk-high shadow-[0_0_8px_rgba(239,68,68,0.3)]",
   extreme: "bg-risk-high shadow-[0_0_8px_rgba(239,68,68,0.3)]",
   critical: "bg-risk-high shadow-[0_0_8px_rgba(239,68,68,0.3)]",
+}
+
+const riskHex: Record<string, string> = {
+  low: "#22C55E",
+  moderate: "#EAB308",
+  high: "#EF4444",
+  critical: "#DC2626",
 }
 
 function formatDayName(dateString: string): string {
@@ -58,17 +89,32 @@ function isToday(dateString: string): boolean {
   )
 }
 
-function getRiskMessage(day: ForecastDay): string {
+function getRiskMessage(day: { high: number; low: number; precip: number; riskLevel: string }, bloomStage: string): string {
   const level = day.riskLevel.toLowerCase()
+  const thresholds = FROST_THRESHOLDS[bloomStage] ?? FROST_THRESHOLDS.dormant
+  const stageLabel = BLOOM_LABELS[bloomStage] ?? bloomStage
+  const marginToKill = day.low - thresholds.kill10
+
   if (level === "high" || level === "extreme" || level === "critical") {
     if (day.precip > 5 && day.high > 10) return "Infection risk \u2014 rain + warmth"
-    if (day.low <= -2) return "Frost risk overnight"
+    if (day.low <= -2) {
+      // Only flag frost as real warning if within 3°C of kill threshold
+      if (marginToKill <= 3) {
+        return `Frost risk (${day.low}°C) \u2014 kill threshold at ${stageLabel} is ${thresholds.kill10}°C`
+      }
+      return `Sub-zero (${day.low}°C) \u2014 no concern at ${stageLabel}. Kill threshold is ${thresholds.kill10}°C`
+    }
     return "Elevated risk \u2014 monitor closely"
   }
   if (level === "moderate" || level === "caution") {
     if (day.precip > 5 && day.high > 10) return "Warm + rain \u2014 monitor for disease"
     if (day.precip > 5) return "Heavy rain \u2014 watch conditions"
-    if (day.low <= 0) return "Near-freezing overnight"
+    if (day.low <= 0) {
+      if (marginToKill <= 3) {
+        return `Near-freezing (${day.low}°C) \u2014 ${Math.round(marginToKill)}°C above kill threshold`
+      }
+      return `Near-freezing (${day.low}°C) \u2014 no concern at ${stageLabel}`
+    }
     return "Moderate conditions \u2014 stay aware"
   }
   // Low risk
@@ -78,7 +124,15 @@ function getRiskMessage(day: ForecastDay): string {
   return "Low risk"
 }
 
-export function ForecastStrip({ days }: ForecastStripProps) {
+export function ForecastStrip({ days, detailedDays, bloomStage }: ForecastStripProps) {
+  const [expandedDate, setExpandedDate] = useState<string | null>(null)
+
+  // Build a lookup from date to detailed risks
+  const detailMap = new Map<string, ForecastDaySummary>()
+  for (const d of detailedDays) {
+    detailMap.set(d.date, d)
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card glass-static overflow-hidden">
       {/* Header */}
@@ -93,47 +147,99 @@ export function ForecastStrip({ days }: ForecastStripProps) {
         const level = day.riskLevel.toLowerCase()
         const isElevated = level === "moderate" || level === "caution" || level === "high" || level === "extreme" || level === "critical"
         const dot = dotColor[level] ?? dotColor.low
+        const isExpanded = expandedDate === day.date
+        const detail = detailMap.get(day.date)
+        const hasRisks = detail && detail.risks.length > 0 && detail.worstRisk !== "low"
 
         return (
-          <div
-            key={day.date}
-            className={cn(
-              "grid items-center px-7 py-3.5 gap-4 transition-colors cursor-pointer hover:bg-card-hover",
-              today && "bg-primary/[0.06] border-l-2 border-l-primary pl-[26px]",
-              !today && "border-t border-border/50",
+          <div key={day.date}>
+            <button
+              onClick={() => setExpandedDate(isExpanded ? null : day.date)}
+              className={cn(
+                "w-full grid items-center px-7 py-3.5 gap-4 transition-colors cursor-pointer hover:bg-card-hover text-left",
+                today && "bg-primary/[0.06] border-l-2 border-l-primary pl-[26px]",
+                !today && "border-t border-border/50",
+              )}
+              style={{ gridTemplateColumns: "130px 90px 55px 1fr auto" }}
+            >
+              {/* Day name */}
+              <span
+                className={cn(
+                  "text-[14px]",
+                  today ? "text-primary font-semibold" : "text-bark-900",
+                )}
+              >
+                {formatDayName(day.date)}
+              </span>
+
+              {/* Temps */}
+              <span className="font-data text-[14px] text-bark-900">
+                {day.high}&deg; <span className="text-bark-300">{day.low}&deg;</span>
+              </span>
+
+              {/* Precip */}
+              <span className="font-data text-[12px] text-bark-400">
+                {day.precip > 0 ? `${day.precip}mm` : "\u2014"}
+              </span>
+
+              {/* Risk */}
+              <span
+                className={cn(
+                  "text-[13px] flex items-center gap-2.5",
+                  isElevated ? "text-risk-moderate" : "text-bark-400",
+                )}
+              >
+                <span className={cn("size-[5px] rounded-full shrink-0", dot)} />
+                {getRiskMessage(day, bloomStage)}
+              </span>
+
+              {/* Expand indicator */}
+              <span className="text-bark-400 shrink-0">
+                {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </span>
+            </button>
+
+            {/* Expanded risk detail */}
+            {isExpanded && detail && (
+              <div className="px-7 pb-4 pt-1 border-t border-border/30 bg-card-hover/30">
+                {detail.risks.length > 0 && detail.risks.some(r => r.riskLevel !== "low") ? (
+                  <div className="space-y-2 mt-1">
+                    {detail.risks.map((risk, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-border px-4 py-3"
+                        style={{ borderLeftWidth: "3px", borderLeftColor: riskHex[risk.riskLevel] ?? "#22C55E" }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className="size-[5px] rounded-full"
+                            style={{ backgroundColor: riskHex[risk.riskLevel] ?? "#22C55E" }}
+                          />
+                          <span className="text-[13px] font-medium text-bark-900 uppercase tracking-wide">
+                            {risk.modelTitle}
+                          </span>
+                        </div>
+                        <p className="text-[13px] leading-[1.65] text-bark-600">
+                          {risk.summary}
+                        </p>
+                        {risk.action && (
+                          <p
+                            className="mt-1.5 text-[13px] font-medium leading-[1.5]"
+                            style={{ color: riskHex[risk.riskLevel] ?? "#22C55E" }}
+                          >
+                            {risk.action}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-bark-400 py-2">
+                    No disease, pest, or abiotic risks expected. Good conditions for fieldwork.
+                  </p>
+                )}
+              </div>
             )}
-            style={{ gridTemplateColumns: "130px 90px 55px 1fr" }}
-          >
-            {/* Day name */}
-            <span
-              className={cn(
-                "text-[14px]",
-                today ? "text-primary font-semibold" : "text-bark-900",
-              )}
-            >
-              {formatDayName(day.date)}
-            </span>
-
-            {/* Temps */}
-            <span className="font-data text-[14px] text-bark-900">
-              {day.high}&deg; <span className="text-bark-300">{day.low}&deg;</span>
-            </span>
-
-            {/* Precip */}
-            <span className="font-data text-[12px] text-bark-400">
-              {day.precip > 0 ? `${day.precip}mm` : "\u2014"}
-            </span>
-
-            {/* Risk */}
-            <span
-              className={cn(
-                "text-[13px] flex items-center gap-2.5",
-                isElevated ? "text-risk-moderate" : "text-bark-400",
-              )}
-            >
-              <span className={cn("size-[5px] rounded-full shrink-0", dot)} />
-              {getRiskMessage(day)}
-            </span>
           </div>
         )
       })}
