@@ -1188,6 +1188,16 @@ export function SettingsForm({
 }) {
   const router = useRouter()
 
+  // ── Debug: log what the server component passed as props ──
+  useEffect(() => {
+    console.log("[SettingsForm] mounted with props:", {
+      initialData: { id: initialData.id, name: initialData.name },
+      irrigationData: irrigationData ? { type: irrigationData.irrigation_type, rate: irrigationData.irrigation_rate_mm_per_hour, enabled: irrigationData.enabled } : null,
+      alertData: alertData ? { email: alertData.email, channel: alertData.channel } : null,
+      blocksCount: initialBlocks.length,
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Responsive tabs ──
   const [isDesktop, setIsDesktop] = useState(true)
   useEffect(() => {
@@ -1489,12 +1499,10 @@ export function SettingsForm({
     if (savingRef.current) return
     savingRef.current = true
     setAutoSaveStatus("saving")
+    console.log("[SettingsForm] autosave triggered — sending to API…")
     try {
       // 1. Save orchard config
-      const res = await fetch("/api/orchard/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const orchardPayload = {
           orchardId: initialData.id,
           name,
           lat: parseFloat(latitude),
@@ -1504,12 +1512,18 @@ export function SettingsForm({
           bloom_stage: bloomStage,
           petal_fall_date: petalFallDate || null,
           codling_moth_biofix_date: codlingMothBiofix || null,
-        }),
+      }
+      console.log("[SettingsForm] POST /api/orchard/config", orchardPayload)
+      const res = await fetch("/api/orchard/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orchardPayload),
       })
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error ?? "Failed to save orchard settings")
       }
+      console.log("[SettingsForm] orchard config saved OK")
 
       // 2. Save irrigation config
       const irrigRes = await fetch("/api/irrigation/config", {
@@ -1531,6 +1545,7 @@ export function SettingsForm({
         const err = await irrigRes.json()
         throw new Error(err.error ?? "Failed to save irrigation settings")
       }
+      console.log("[SettingsForm] irrigation config saved OK")
 
       // 3. Save alert preferences
       const alertRes = await fetch("/api/alerts/config", {
@@ -1552,6 +1567,7 @@ export function SettingsForm({
         const err = await alertRes.json()
         throw new Error(err.error ?? "Failed to save alert preferences")
       }
+      console.log("[SettingsForm] all 3 APIs saved OK — calling router.refresh()")
 
       setSavedState({
         name, latitude, longitude, elevation,
@@ -1563,6 +1579,7 @@ export function SettingsForm({
       setAutoSaveStatus("saved")
       router.refresh()
     } catch (err) {
+      console.error("[SettingsForm] save FAILED:", err)
       setAutoSaveStatus("error")
       setToast({
         message: err instanceof Error ? err.message : "An unexpected error occurred.",

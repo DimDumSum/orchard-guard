@@ -6,6 +6,8 @@
 
 import { getDb } from "@/lib/db";
 import type { SprayLogRow, WorkerRow } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {

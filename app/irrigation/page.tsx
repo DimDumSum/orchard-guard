@@ -16,6 +16,8 @@ import { SYSTEM_EFFICIENCY, IRRIGATION_TYPE_LABELS, SOIL_TYPE_LABELS } from "@/l
 import type { MoistureStatus } from "@/lib/irrigation/types"
 import { IrrigationLogForm } from "./irrigation-log-form"
 
+export const dynamic = "force-dynamic"
+
 // ---------------------------------------------------------------------------
 
 function toDateStr(d: Date): string {

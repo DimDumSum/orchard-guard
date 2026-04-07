@@ -31,6 +31,8 @@ import { SoilMoistureCard } from "@/components/dashboard/soil-moisture-card"
 import { buildDashboardData } from "@/lib/irrigation/water-balance"
 import { updateDailyWaterBalance } from "@/lib/irrigation/update-balance"
 
+export const dynamic = "force-dynamic"
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

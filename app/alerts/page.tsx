@@ -10,6 +10,8 @@ import { isSmsConfigured } from "@/lib/alerts/sms"
 import { AlertsForm } from "./alerts-form"
 import { Bell, Info } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default async function AlertsPage() {
   const orchardId = 1
   const prefs = getAlertPrefs(orchardId)

@@ -3,6 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { getOrchard, getIrrigationConfig, getAlertPrefs, getOrchardBlocks } from "@/lib/db"
+
+export const dynamic = "force-dynamic"
 import { SettingsForm } from "./settings-form"
 import { ExternalLink, BookOpen } from "lucide-react"
 
@@ -26,6 +28,7 @@ const ontarioResources = [
 ]
 
 export default async function SettingsPage() {
+  console.log("[SettingsPage] server render — reading from DB")
   const orchard = getOrchard()
 
   const initialData = orchard
@@ -61,6 +64,12 @@ export default async function SettingsPage() {
         available_water_mm: irrigConfig.available_water_mm,
       }
     : null
+
+  console.log("[SettingsPage] loaded from DB:", {
+    orchardName: orchard?.name,
+    irrigationType: irrigConfig?.irrigation_type,
+    irrigRate: irrigConfig?.irrigation_rate_mm_per_hour,
+  })
 
   const alertPrefs = orchard ? getAlertPrefs(orchard.id) : undefined
   const alertData = alertPrefs

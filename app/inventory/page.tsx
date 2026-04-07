@@ -7,6 +7,8 @@
 
 import { getDb, getSprayProducts } from "@/lib/db"
 import type { SprayProductRow } from "@/lib/db"
+
+export const dynamic = "force-dynamic"
 import { InventoryTable } from "./inventory-table"
 import { AddStockForm } from "./add-stock-form"
 

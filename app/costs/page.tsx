@@ -1,5 +1,7 @@
 import { getDb, getOrchard } from "@/lib/db";
 import type { SprayLogRow, SprayProductRow } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,

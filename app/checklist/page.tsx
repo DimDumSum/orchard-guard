@@ -8,6 +8,8 @@
 import { getOrchard } from "@/lib/db"
 import { CheckSquare } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 // ---------------------------------------------------------------------------
 // Checklist data — hardcoded seasonal checklists keyed by bloom stage
 // ---------------------------------------------------------------------------

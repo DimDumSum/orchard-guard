@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/table"
 
 import { getDb, getOrchard } from "@/lib/db"
+
+export const dynamic = "force-dynamic"
 import type {
   FertilizerLogRow,
   SoilTestRow,

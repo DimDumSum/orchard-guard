@@ -9,6 +9,8 @@ import { getSprayProducts, getTankMixTemplates } from "@/lib/db"
 import type { SprayProductRow, TankMixTemplateRow } from "@/lib/db"
 import { TankMixBuilder } from "./tank-mix-builder"
 
+export const dynamic = "force-dynamic"
+
 export default async function TankMixPage() {
   const products: SprayProductRow[] = getSprayProducts()
   const templates: TankMixTemplateRow[] = getTankMixTemplates(1)

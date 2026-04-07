@@ -9,6 +9,8 @@ import { getDb } from "@/lib/db"
 import type { SprayLogRow } from "@/lib/db"
 import { SprayForm } from "./spray-form"
 import { SprayTable } from "./spray-table"
+
+export const dynamic = "force-dynamic"
 import { TermTooltip } from "@/components/term-tooltip"
 import { Beaker } from "lucide-react"
 

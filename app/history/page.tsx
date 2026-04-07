@@ -7,6 +7,8 @@
 
 import { getDb, getOrchard } from "@/lib/db";
 import type { SprayLogRow, WeatherDailyRow } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 import { calcDegreeDaysSine } from "@/lib/degree-days";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
