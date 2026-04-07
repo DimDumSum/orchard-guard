@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -1263,15 +1263,42 @@ export function SettingsForm({
   // ── Weather ──
   const [envCanadaStationId, setEnvCanadaStationId] = useState("")
 
-  // ── Save state ──
-  const [saving, setSaving] = useState(false)
+  // ── Save / autosave state ──
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+  const savingRef = useRef(false)
+  const isInitialMount = useRef(true)
+  const [savedState, setSavedState] = useState({
+    name, latitude, longitude, elevation,
+    fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
+    irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
+    alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
+    quietStart, quietEnd,
+  })
 
   useEffect(() => {
     if (!toast) return
     const timer = setTimeout(() => setToast(null), 3500)
     return () => clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    if (autoSaveStatus !== "saved") return
+    const timer = setTimeout(() => setAutoSaveStatus("idle"), 2000)
+    return () => clearTimeout(timer)
+  }, [autoSaveStatus])
+
+  // Per-tab dirty tracking
+  const dirtyTabs = useMemo(() => {
+    const s = savedState
+    const dirty = new Set<string>()
+    if (name !== s.name || latitude !== s.latitude || longitude !== s.longitude || elevation !== s.elevation) dirty.add("profile")
+    if (bloomStage !== s.bloomStage || codlingMothBiofix !== s.codlingMothBiofix || petalFallDate !== s.petalFallDate) dirty.add("phenology")
+    if (fireBlightHistory !== s.fireBlightHistory) dirty.add("disease")
+    if (irrigEnabled !== s.irrigEnabled || soilType !== s.soilType || rootDepth !== s.rootDepth || mad !== s.mad || irrigType !== s.irrigType || irrigRate !== s.irrigRate || waterCost !== s.waterCost || blockArea !== s.blockArea) dirty.add("irrigation")
+    if (alertEmail !== s.alertEmail || alertPhone !== s.alertPhone || alertChannel !== s.alertChannel || urgentEnabled !== s.urgentEnabled || warningEnabled !== s.warningEnabled || preparationEnabled !== s.preparationEnabled || quietStart !== s.quietStart || quietEnd !== s.quietEnd) dirty.add("notifications")
+    return dirty
+  }, [name, latitude, longitude, elevation, fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix, irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled, quietStart, quietEnd, savedState])
 
   // ── Test alerts ──
   const [testingEmail, setTestingEmail] = useState(false)
@@ -1306,7 +1333,9 @@ export function SettingsForm({
 
   // ── Save handler ──
   const handleSave = useCallback(async () => {
-    setSaving(true)
+    if (savingRef.current) return
+    savingRef.current = true
+    setAutoSaveStatus("saving")
     try {
       // 1. Save orchard config
       const res = await fetch("/api/orchard/config", {
@@ -1370,15 +1399,23 @@ export function SettingsForm({
         throw new Error(err.error ?? "Failed to save alert preferences")
       }
 
-      setToast({ message: "Settings saved successfully.", type: "success" })
+      setSavedState({
+        name, latitude, longitude, elevation,
+        fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
+        irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
+        alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
+        quietStart, quietEnd,
+      })
+      setAutoSaveStatus("saved")
       router.refresh()
     } catch (err) {
+      setAutoSaveStatus("error")
       setToast({
         message: err instanceof Error ? err.message : "An unexpected error occurred.",
         type: "error",
       })
     } finally {
-      setSaving(false)
+      savingRef.current = false
     }
   }, [
     initialData.id, name, latitude, longitude, elevation,
@@ -1387,6 +1424,20 @@ export function SettingsForm({
     alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
     quietStart, quietEnd, router,
   ])
+
+  // ── Autosave with 1s debounce ──
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
+    const timer = setTimeout(() => {
+      handleSave()
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [handleSave])
 
   const today = new Date().toISOString().split("T")[0]
 
@@ -1416,6 +1467,9 @@ export function SettingsForm({
               >
                 <tab.icon className="size-4 shrink-0" />
                 <span className={isDesktop ? "" : "hidden sm:inline"}>{tab.label}</span>
+                {dirtyTabs.has(tab.value) && (
+                  <span className="size-1.5 rounded-full bg-yellow-400 shrink-0 ml-auto" />
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -1800,22 +1854,29 @@ export function SettingsForm({
               </div>
             </TabsContent>
 
-            {/* ── Save Button ── */}
-            <div className="mt-6 sticky bottom-4 z-10 sm:static sm:bottom-auto">
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save Settings"
-                )}
-              </Button>
+            {/* ── Autosave Status ── */}
+            <div className="mt-6 flex items-center gap-2 text-[13px] h-8">
+              {autoSaveStatus === "saving" && (
+                <span className="flex items-center gap-1.5 text-bark-400">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Saving...
+                </span>
+              )}
+              {autoSaveStatus === "saved" && (
+                <span className="flex items-center gap-1.5 text-primary">
+                  <Check className="size-3.5" />
+                  Saved
+                </span>
+              )}
+              {autoSaveStatus === "error" && (
+                <span className="flex items-center gap-1.5 text-destructive">
+                  <AlertCircle className="size-3.5" />
+                  Save failed
+                </span>
+              )}
+              {autoSaveStatus === "idle" && dirtyTabs.size > 0 && (
+                <span className="text-bark-400">Unsaved changes</span>
+              )}
             </div>
           </div>
         </div>
