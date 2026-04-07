@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -16,6 +16,14 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import {
   MapPin,
   Flower2,
@@ -33,6 +41,9 @@ import {
   LocateFixed,
   Calendar,
   ExternalLink,
+  Pencil,
+  Trash2,
+  ChevronDown,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -51,6 +62,21 @@ interface OrchardData {
   bloom_stage: string
   petal_fall_date: string
   codling_moth_biofix_date: string
+}
+
+interface PlantedBlock {
+  id: number
+  orchard_id: number
+  block_name: string
+  variety: string
+  rootstock: string | null
+  planted_year: number | null
+  tree_count: number | null
+  spacing_in_row_m: number | null
+  spacing_between_rows_m: number | null
+  area_ha: number | null
+  notes: string | null
+  created_at: string
 }
 
 interface IrrigationData {
@@ -126,7 +152,133 @@ const STAGE_GUIDANCE: Record<string, string> = {
   "fruit-set": "Fruitlets developing. Codling moth DD tracking is critical.",
 }
 
-const COMMON_ROOTSTOCKS = ["M.9", "B.9", "G.41", "M.26", "MM.106", "G.935", "M.7"]
+// ---------------------------------------------------------------------------
+// Variety & Rootstock data with disease susceptibility traits
+// ---------------------------------------------------------------------------
+
+interface VarietyInfo {
+  name: string
+  season: "early" | "mid" | "late" | "heritage"
+  traits: Record<string, "resistant" | "tolerant" | "low" | "moderate" | "susceptible" | "high" | "very_high">
+}
+
+interface RootstockInfo {
+  name: string
+  vigor: "dwarfing" | "semi-dwarfing" | "semi-vigorous" | "vigorous"
+  sizePercent: number
+  description: string
+  traits: Record<string, "resistant" | "tolerant" | "low" | "moderate" | "susceptible" | "high" | "very_susceptible">
+}
+
+const APPLE_VARIETIES: VarietyInfo[] = [
+  // EARLY SEASON
+  { name: "Paula Red", season: "early", traits: { fire_blight: "moderate", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Ginger Gold", season: "early", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "Zestar", season: "early", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Sansa", season: "early", traits: { fire_blight: "low", scab: "moderate", bitter_pit: "low", powdery_mildew: "low" } },
+  // MID SEASON
+  { name: "Gala", season: "mid", traits: { fire_blight: "high", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low", cedar_apple_rust: "moderate" } },
+  { name: "Royal Gala", season: "mid", traits: { fire_blight: "high", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Buckeye Gala", season: "mid", traits: { fire_blight: "high", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Brookfield Gala", season: "mid", traits: { fire_blight: "high", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "McIntosh", season: "mid", traits: { fire_blight: "moderate", scab: "very_high", bitter_pit: "low", powdery_mildew: "susceptible", cedar_apple_rust: "resistant" } },
+  { name: "Cortland", season: "mid", traits: { fire_blight: "moderate", scab: "susceptible", bitter_pit: "high", powdery_mildew: "susceptible", cedar_apple_rust: "moderate" } },
+  { name: "Empire", season: "mid", traits: { fire_blight: "moderate", scab: "susceptible", bitter_pit: "low", powdery_mildew: "moderate", cedar_apple_rust: "resistant" } },
+  { name: "Honeycrisp", season: "mid", traits: { fire_blight: "high", scab: "moderate", bitter_pit: "very_high", powdery_mildew: "low", cedar_apple_rust: "moderate" } },
+  { name: "Jonagold", season: "mid", traits: { fire_blight: "susceptible", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "susceptible" } },
+  { name: "Spartan", season: "mid", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "low", powdery_mildew: "moderate" } },
+  // LATE SEASON
+  { name: "Red Delicious", season: "late", traits: { fire_blight: "susceptible", scab: "moderate", bitter_pit: "low", powdery_mildew: "low", cedar_apple_rust: "resistant" } },
+  { name: "Golden Delicious", season: "late", traits: { fire_blight: "susceptible", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "moderate" } },
+  { name: "Northern Spy", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "high", powdery_mildew: "moderate" } },
+  { name: "Idared", season: "late", traits: { fire_blight: "moderate", scab: "susceptible", bitter_pit: "low", powdery_mildew: "susceptible" } },
+  { name: "Mutsu/Crispin", season: "late", traits: { fire_blight: "susceptible", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "moderate" } },
+  { name: "Fuji", season: "late", traits: { fire_blight: "high", scab: "susceptible", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Braeburn", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "Pink Lady", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "Ambrosia", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "SweeTango", season: "late", traits: { fire_blight: "high", scab: "moderate", bitter_pit: "high", powdery_mildew: "low" } },
+  { name: "SnapDragon", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "Envy", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "RubyFrost", season: "late", traits: { fire_blight: "low", scab: "tolerant", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Cosmic Crisp", season: "late", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  // HERITAGE/CIDER
+  { name: "Wolf River", season: "heritage", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "low" } },
+  { name: "Golden Russet", season: "heritage", traits: { fire_blight: "low", scab: "tolerant", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Roxbury Russet", season: "heritage", traits: { fire_blight: "low", scab: "tolerant", bitter_pit: "low", powdery_mildew: "low" } },
+  { name: "Baldwin", season: "heritage", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "moderate", powdery_mildew: "moderate" } },
+  { name: "Kingston Black", season: "heritage", traits: { fire_blight: "moderate", scab: "susceptible", bitter_pit: "low", powdery_mildew: "moderate" } },
+  { name: "Dabinett", season: "heritage", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "low", powdery_mildew: "moderate" } },
+  { name: "Yarlington Mill", season: "heritage", traits: { fire_blight: "moderate", scab: "moderate", bitter_pit: "low", powdery_mildew: "moderate" } },
+]
+
+const SEASON_LABELS: Record<string, string> = {
+  early: "Early Season",
+  mid: "Mid Season",
+  late: "Late Season",
+  heritage: "Heritage / Cider",
+}
+
+const ROOTSTOCK_DATA: RootstockInfo[] = [
+  // DWARFING
+  { name: "M.27", vigor: "dwarfing", sizePercent: 25, description: "Extremely dwarfing", traits: { fire_blight: "susceptible", phytophthora: "susceptible", woolly_aphid: "susceptible" } },
+  { name: "B.9", vigor: "dwarfing", sizePercent: 30, description: "Very dwarfing, cold hardy, fire blight tolerant", traits: { fire_blight: "tolerant", phytophthora: "moderate", woolly_aphid: "moderate" } },
+  { name: "M.9", vigor: "dwarfing", sizePercent: 30, description: "Very dwarfing, fire blight susceptible", traits: { fire_blight: "very_susceptible", phytophthora: "susceptible", woolly_aphid: "susceptible" } },
+  { name: "G.11", vigor: "dwarfing", sizePercent: 35, description: "Dwarfing, fire blight resistant", traits: { fire_blight: "resistant", phytophthora: "tolerant", woolly_aphid: "resistant" } },
+  { name: "G.41", vigor: "dwarfing", sizePercent: 35, description: "Dwarfing, fire blight resistant, replant tolerant", traits: { fire_blight: "resistant", phytophthora: "tolerant", woolly_aphid: "resistant" } },
+  // SEMI-DWARFING
+  { name: "M.26", vigor: "semi-dwarfing", sizePercent: 40, description: "Semi-dwarf, fire blight susceptible", traits: { fire_blight: "susceptible", phytophthora: "susceptible", woolly_aphid: "susceptible" } },
+  { name: "G.935", vigor: "semi-dwarfing", sizePercent: 50, description: "Semi-dwarf, fire blight resistant", traits: { fire_blight: "resistant", phytophthora: "tolerant", woolly_aphid: "resistant" } },
+  { name: "G.214", vigor: "semi-dwarfing", sizePercent: 50, description: "Semi-dwarf", traits: { fire_blight: "resistant", phytophthora: "tolerant", woolly_aphid: "resistant" } },
+  // SEMI-VIGOROUS
+  { name: "MM.106", vigor: "semi-vigorous", sizePercent: 65, description: "Semi-vigorous, susceptible to collar rot", traits: { fire_blight: "moderate", phytophthora: "very_susceptible", woolly_aphid: "moderate" } },
+  { name: "M.7", vigor: "semi-vigorous", sizePercent: 65, description: "Semi-vigorous", traits: { fire_blight: "moderate", phytophthora: "moderate", woolly_aphid: "susceptible" } },
+  { name: "G.890", vigor: "semi-vigorous", sizePercent: 70, description: "Semi-vigorous, fire blight resistant", traits: { fire_blight: "resistant", phytophthora: "tolerant", woolly_aphid: "resistant" } },
+  // VIGOROUS
+  { name: "MM.111", vigor: "vigorous", sizePercent: 80, description: "Vigorous", traits: { fire_blight: "moderate", phytophthora: "moderate", woolly_aphid: "moderate" } },
+  { name: "M.25", vigor: "vigorous", sizePercent: 90, description: "Vigorous", traits: { fire_blight: "moderate", phytophthora: "moderate", woolly_aphid: "moderate" } },
+  { name: "Antonovka", vigor: "vigorous", sizePercent: 100, description: "Seedling, very cold hardy", traits: { fire_blight: "moderate", phytophthora: "tolerant", woolly_aphid: "moderate" } },
+  { name: "Standard seedling", vigor: "vigorous", sizePercent: 100, description: "Full size", traits: { fire_blight: "moderate", phytophthora: "moderate", woolly_aphid: "moderate" } },
+]
+
+const VIGOR_LABELS: Record<string, string> = {
+  dwarfing: "Dwarfing",
+  "semi-dwarfing": "Semi-Dwarfing",
+  "semi-vigorous": "Semi-Vigorous",
+  vigorous: "Vigorous",
+}
+
+const TRAIT_LABELS: Record<string, string> = {
+  fire_blight: "Fire Blight",
+  scab: "Apple Scab",
+  bitter_pit: "Bitter Pit",
+  powdery_mildew: "Powdery Mildew",
+  cedar_apple_rust: "Cedar Apple Rust",
+  phytophthora: "Phytophthora",
+  woolly_aphid: "Woolly Apple Aphid",
+}
+
+const TRAIT_COLORS: Record<string, string> = {
+  resistant: "bg-emerald-500/15 text-emerald-400",
+  tolerant: "bg-emerald-500/15 text-emerald-400",
+  low: "bg-emerald-500/15 text-emerald-400",
+  moderate: "bg-yellow-500/15 text-yellow-400",
+  susceptible: "bg-orange-500/15 text-orange-400",
+  high: "bg-red-500/15 text-red-400",
+  very_high: "bg-red-500/15 text-red-400",
+  very_susceptible: "bg-red-500/15 text-red-400",
+}
+
+const TRAIT_ICONS: Record<string, string> = {
+  resistant: "\u2705",
+  tolerant: "\u2705",
+  low: "\u2705",
+  moderate: "\u26A0\uFE0F",
+  susceptible: "\u26A0\uFE0F",
+  high: "\u26A0\uFE0F",
+  very_high: "\u{1F6A8}",
+  very_susceptible: "\u{1F6A8}",
+}
 
 const FIRE_BLIGHT_OPTIONS = [
   {
@@ -224,112 +376,524 @@ function BloomStagePicker({ value, onChange }: { value: string; onChange: (v: st
   )
 }
 
-function VarietyTagInput({ varieties, onChange }: { varieties: string[]; onChange: (v: string[]) => void }) {
-  const [inputValue, setInputValue] = useState("")
+// ---------------------------------------------------------------------------
+// Searchable Combobox — reusable for variety and rootstock pickers
+// ---------------------------------------------------------------------------
 
-  function addVariety() {
-    const trimmed = inputValue.trim()
-    if (trimmed && !varieties.includes(trimmed)) {
-      onChange([...varieties, trimmed])
-      setInputValue("")
-    }
-  }
+function SearchableCombobox({
+  value,
+  onChange,
+  placeholder,
+  groups,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  groups: { label: string; items: { value: string; description?: string }[] }[]
+}) {
+  const [search, setSearch] = useState("")
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault()
-      addVariety()
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
     }
-    if (e.key === "Backspace" && inputValue === "" && varieties.length > 0) {
-      onChange(varieties.slice(0, -1))
-    }
-  }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  const query = search.toLowerCase()
+  const filtered = groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (i) =>
+          i.value.toLowerCase().includes(query) ||
+          (i.description && i.description.toLowerCase().includes(query))
+      ),
+    }))
+    .filter((g) => g.items.length > 0)
 
   return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {varieties.map((v) => (
-          <span
-            key={v}
-            className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-[13px] font-medium text-primary"
-          >
-            {v}
-            <button type="button" onClick={() => onChange(varieties.filter((x) => x !== v))} className="cursor-pointer hover:text-primary/70">
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="flex gap-2">
+    <div ref={wrapperRef} className="relative">
+      <div className="relative">
         <Input
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type variety and press Enter"
-          className="flex-1"
+          value={open ? search : value}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            if (!open) setOpen(true)
+          }}
+          onFocus={() => {
+            setOpen(true)
+            setSearch("")
+          }}
+          placeholder={placeholder}
+          className="pr-8"
         />
-        <Button type="button" variant="outline" size="sm" onClick={addVariety} disabled={!inputValue.trim()}>
-          <Plus className="size-4" />
-        </Button>
+        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
       </div>
-      <p className="text-caption text-muted-foreground mt-1.5">
-        Honeycrisp is highly susceptible to fire blight. McIntosh is susceptible to scab.
-      </p>
+      {open && (
+        <div
+          className="absolute z-[200] mt-1 w-full max-h-64 overflow-y-auto rounded-lg border text-sm"
+          style={{
+            background: "#18181B",
+            border: "1px solid #27272A",
+            boxShadow: "0 10px 38px rgba(0,0,0,0.6), 0 10px 20px rgba(0,0,0,0.4)",
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-muted-foreground text-[13px]">
+              No matches. Type a custom value and press Enter.
+            </div>
+          ) : (
+            filtered.map((group) => (
+              <div key={group.label}>
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-[#18181B]">
+                  {group.label}
+                </div>
+                {group.items.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={cn(
+                      "w-full text-left px-3 py-1.5 cursor-pointer hover:bg-white/5 transition-colors",
+                      value === item.value && "bg-primary/10 text-primary",
+                    )}
+                    onClick={() => {
+                      onChange(item.value)
+                      setSearch("")
+                      setOpen(false)
+                    }}
+                  >
+                    <div className="text-[13px]">{item.value}</div>
+                    {item.description && (
+                      <div className="text-[11px] text-muted-foreground">{item.description}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+          {search.trim() && !APPLE_VARIETIES.some((v) => v.name.toLowerCase() === query) && !ROOTSTOCK_DATA.some((r) => r.name.toLowerCase() === query) && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 cursor-pointer hover:bg-white/5 border-t border-zinc-800 text-[13px] text-primary"
+              onClick={() => {
+                onChange(search.trim())
+                setSearch("")
+                setOpen(false)
+              }}
+            >
+              Use &ldquo;{search.trim()}&rdquo; as custom value
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function RootstockSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const selected = value.split(",").map((s) => s.trim()).filter(Boolean)
-  const customRootstocks = selected.filter((r) => !COMMON_ROOTSTOCKS.includes(r))
-  const [otherValue, setOtherValue] = useState(customRootstocks.join(", "))
+// ---------------------------------------------------------------------------
+// Block Manager — replaces VarietyTagInput + RootstockSelector
+// ---------------------------------------------------------------------------
 
-  function toggle(rs: string) {
-    const newSelected = selected.includes(rs)
-      ? selected.filter((x) => x !== rs)
-      : [...selected, rs]
-    onChange(newSelected.join(", "))
+function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initialBlocks: PlantedBlock[] }) {
+  const [blocks, setBlocks] = useState<PlantedBlock[]>(initialBlocks)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingBlock, setEditingBlock] = useState<PlantedBlock | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Form fields
+  const [blockName, setBlockName] = useState("")
+  const [variety, setVariety] = useState("")
+  const [rootstock, setRootstock] = useState("")
+  const [plantedYear, setPlantedYear] = useState("")
+  const [treeCount, setTreeCount] = useState("")
+  const [spacingInRow, setSpacingInRow] = useState("")
+  const [spacingBetweenRows, setSpacingBetweenRows] = useState("")
+  const [areaHa, setAreaHa] = useState("")
+  const [blockNotes, setBlockNotes] = useState("")
+
+  function resetForm() {
+    setBlockName("")
+    setVariety("")
+    setRootstock("")
+    setPlantedYear("")
+    setTreeCount("")
+    setSpacingInRow("")
+    setSpacingBetweenRows("")
+    setAreaHa("")
+    setBlockNotes("")
+    setEditingBlock(null)
   }
 
-  function handleOtherChange(val: string) {
-    setOtherValue(val)
-    const common = selected.filter((r) => COMMON_ROOTSTOCKS.includes(r))
-    const custom = val.split(",").map((s) => s.trim()).filter(Boolean)
-    onChange([...common, ...custom].join(", "))
+  function openAdd() {
+    resetForm()
+    setDialogOpen(true)
+  }
+
+  function openEdit(block: PlantedBlock) {
+    setEditingBlock(block)
+    setBlockName(block.block_name)
+    setVariety(block.variety)
+    setRootstock(block.rootstock ?? "")
+    setPlantedYear(block.planted_year ? String(block.planted_year) : "")
+    setTreeCount(block.tree_count ? String(block.tree_count) : "")
+    setSpacingInRow(block.spacing_in_row_m ? String(block.spacing_in_row_m) : "")
+    setSpacingBetweenRows(block.spacing_between_rows_m ? String(block.spacing_between_rows_m) : "")
+    setAreaHa(block.area_ha ? String(block.area_ha) : "")
+    setBlockNotes(block.notes ?? "")
+    setDialogOpen(true)
+  }
+
+  // Auto-calculate area from tree count and spacing
+  const computedArea = (() => {
+    const count = parseInt(treeCount)
+    const inRow = parseFloat(spacingInRow)
+    const betweenRows = parseFloat(spacingBetweenRows)
+    if (count > 0 && inRow > 0 && betweenRows > 0) {
+      return ((count * inRow * betweenRows) / 10000).toFixed(2)
+    }
+    return null
+  })()
+
+  async function handleSaveBlock() {
+    if (!blockName.trim() || !variety.trim()) return
+    setSaving(true)
+    try {
+      const payload = {
+        orchardId,
+        blockName: blockName.trim(),
+        variety: variety.trim(),
+        rootstock: rootstock.trim() || null,
+        plantedYear: plantedYear ? parseInt(plantedYear) : null,
+        treeCount: treeCount ? parseInt(treeCount) : null,
+        spacingInRowM: spacingInRow ? parseFloat(spacingInRow) : null,
+        spacingBetweenRowsM: spacingBetweenRows ? parseFloat(spacingBetweenRows) : null,
+        areaHa: areaHa ? parseFloat(areaHa) : computedArea ? parseFloat(computedArea) : null,
+        notes: blockNotes.trim() || null,
+      }
+
+      if (editingBlock) {
+        const res = await fetch("/api/orchard/blocks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingBlock.id, ...payload }),
+        })
+        if (!res.ok) throw new Error("Failed to update block")
+        const data = await res.json()
+        setBlocks((prev) => prev.map((b) => (b.id === editingBlock.id ? data.block : b)))
+      } else {
+        const res = await fetch("/api/orchard/blocks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error("Failed to create block")
+        const data = await res.json()
+        setBlocks((prev) => [...prev, data.block])
+      }
+      setDialogOpen(false)
+      resetForm()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (deleteConfirmId !== id) {
+      setDeleteConfirmId(id)
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+      deleteTimerRef.current = setTimeout(() => setDeleteConfirmId(null), 3000)
+      return
+    }
+    setDeleteConfirmId(null)
+    try {
+      const res = await fetch("/api/orchard/blocks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, orchardId }),
+      })
+      if (!res.ok) throw new Error("Failed to delete block")
+      setBlocks((prev) => prev.filter((b) => b.id !== id))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const varietyGroups = (["early", "mid", "late", "heritage"] as const).map((season) => ({
+    label: SEASON_LABELS[season],
+    items: APPLE_VARIETIES.filter((v) => v.season === season).map((v) => ({
+      value: v.name,
+      description: Object.entries(v.traits)
+        .filter(([, level]) => level === "high" || level === "very_high" || level === "susceptible")
+        .map(([key]) => TRAIT_LABELS[key])
+        .join(", ") || undefined,
+    })),
+  }))
+
+  const rootstockGroups = (["dwarfing", "semi-dwarfing", "semi-vigorous", "vigorous"] as const).map((vigor) => ({
+    label: VIGOR_LABELS[vigor],
+    items: ROOTSTOCK_DATA.filter((r) => r.vigor === vigor).map((r) => ({
+      value: r.name,
+      description: `${r.sizePercent}% standard size \u2014 ${r.description}`,
+    })),
+  }))
+
+  function getBlockTraits(block: PlantedBlock) {
+    const traits: { label: string; level: string; icon: string }[] = []
+    const varietyInfo = APPLE_VARIETIES.find((v) => v.name === block.variety)
+    const rootstockInfo = ROOTSTOCK_DATA.find((r) => r.name === block.rootstock)
+
+    if (varietyInfo) {
+      for (const [key, level] of Object.entries(varietyInfo.traits)) {
+        if (level === "high" || level === "very_high" || level === "susceptible") {
+          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.variety})`, level, icon: TRAIT_ICONS[level] ?? "" })
+        }
+        if (level === "resistant" || level === "tolerant") {
+          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.variety})`, level, icon: TRAIT_ICONS[level] ?? "" })
+        }
+      }
+    }
+    if (rootstockInfo) {
+      for (const [key, level] of Object.entries(rootstockInfo.traits)) {
+        if (level === "resistant" || level === "tolerant") {
+          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.rootstock})`, level, icon: TRAIT_ICONS[level] ?? "" })
+        }
+        if (level === "very_susceptible" || level === "susceptible") {
+          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.rootstock})`, level, icon: TRAIT_ICONS[level] ?? "" })
+        }
+      }
+    }
+
+    // Sort: warnings first, then positives
+    const order: Record<string, number> = { very_high: 0, very_susceptible: 0, susceptible: 1, high: 1, moderate: 2, tolerant: 3, resistant: 4, low: 5 }
+    traits.sort((a, b) => (order[a.level] ?? 3) - (order[b.level] ?? 3))
+    return traits.slice(0, 6)
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {COMMON_ROOTSTOCKS.map((rs) => (
-          <button
-            key={rs}
-            type="button"
-            onClick={() => toggle(rs)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-all cursor-pointer",
-              selected.includes(rs)
-                ? "bg-primary/10 border-primary text-primary"
-                : "bg-card border-border text-bark-600 hover:border-bark-400",
-            )}
-          >
-            {rs}
-          </button>
-        ))}
+      {/* Block cards */}
+      <div className="grid grid-cols-1 gap-3">
+        {blocks.map((block) => {
+          const traits = getBlockTraits(block)
+          return (
+            <div key={block.id} className="rounded-xl border border-border bg-card p-4 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-[14px] font-semibold text-foreground truncate">
+                    {block.block_name}
+                    <span className="font-normal text-bark-400">
+                      {" \u2014 "}{block.variety}{block.rootstock ? ` on ${block.rootstock}` : ""}
+                    </span>
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-bark-400 mt-0.5">
+                    {block.planted_year && <span>Planted {block.planted_year}</span>}
+                    {block.area_ha && <span>{block.area_ha} ha</span>}
+                    {block.tree_count && <span>{block.tree_count.toLocaleString()} trees</span>}
+                    {block.spacing_in_row_m && block.spacing_between_rows_m && (
+                      <span>{block.spacing_in_row_m}m &times; {block.spacing_between_rows_m}m</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(block)}
+                    className="p-1.5 rounded-md hover:bg-white/5 text-bark-400 hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(block.id)}
+                    className={cn(
+                      "p-1.5 rounded-md transition-colors cursor-pointer",
+                      deleteConfirmId === block.id
+                        ? "bg-red-500/20 text-red-400"
+                        : "hover:bg-white/5 text-bark-400 hover:text-foreground",
+                    )}
+                    title={deleteConfirmId === block.id ? "Click again to confirm delete" : "Delete block"}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+              {block.notes && (
+                <p className="text-[12px] text-bark-400 italic">{block.notes}</p>
+              )}
+              {traits.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {traits.map((t, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                        TRAIT_COLORS[t.level] ?? "bg-zinc-500/15 text-zinc-400",
+                      )}
+                    >
+                      {t.icon} {t.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="rootstock-other" className="text-[12px]">Other rootstock</Label>
-        <Input
-          id="rootstock-other"
-          value={otherValue}
-          onChange={(e) => handleOtherChange(e.target.value)}
-          placeholder="e.g. CG.4210, Antonovka"
-          className="max-w-xs"
-        />
-      </div>
-      <p className="text-caption text-muted-foreground">
-        Dwarfing rootstocks (M.9, B.9) are more susceptible to fire blight, Phytophthora, and borers.
-      </p>
+
+      {/* Add block button */}
+      <button
+        type="button"
+        onClick={openAdd}
+        className="w-full rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-transparent p-4 flex items-center justify-center gap-2 text-[13px] text-bark-400 hover:text-primary transition-colors cursor-pointer"
+      >
+        <Plus className="size-4" />
+        Add Block
+      </button>
+
+      {/* Block form dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open) }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingBlock ? "Edit Block" : "Add Block"}</DialogTitle>
+            <DialogDescription>
+              Define a planting block with variety, rootstock, and spacing details.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Block Name <span className="text-red-400">*</span></Label>
+              <Input
+                value={blockName}
+                onChange={(e) => setBlockName(e.target.value)}
+                placeholder='e.g. "North Block", "Block A"'
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Variety <span className="text-red-400">*</span></Label>
+              <SearchableCombobox
+                value={variety}
+                onChange={setVariety}
+                placeholder="Search varieties..."
+                groups={varietyGroups}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Rootstock</Label>
+              <SearchableCombobox
+                value={rootstock}
+                onChange={setRootstock}
+                placeholder="Search rootstocks..."
+                groups={rootstockGroups}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Year Planted</Label>
+                <Input
+                  type="number"
+                  min={1900}
+                  max={new Date().getFullYear()}
+                  value={plantedYear}
+                  onChange={(e) => setPlantedYear(e.target.value)}
+                  placeholder="e.g. 2018"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tree Count</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={treeCount}
+                  onChange={(e) => setTreeCount(e.target.value)}
+                  placeholder="e.g. 1200"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Spacing In Row (m)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min={0.1}
+                  value={spacingInRow}
+                  onChange={(e) => setSpacingInRow(e.target.value)}
+                  placeholder="e.g. 1.0"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Spacing Between Rows (m)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min={0.1}
+                  value={spacingBetweenRows}
+                  onChange={(e) => setSpacingBetweenRows(e.target.value)}
+                  placeholder="e.g. 4.0"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Area (ha)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0.01}
+                value={areaHa || (computedArea ?? "")}
+                onChange={(e) => setAreaHa(e.target.value)}
+                placeholder={computedArea ? `Auto-calculated: ${computedArea} ha` : "e.g. 1.2"}
+              />
+              {computedArea && !areaHa && (
+                <p className="text-[11px] text-muted-foreground">
+                  Auto-calculated from {treeCount} trees at {spacingInRow}m &times; {spacingBetweenRows}m
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Input
+                value={blockNotes}
+                onChange={(e) => setBlockNotes(e.target.value)}
+                placeholder="Optional notes about this block"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { resetForm(); setDialogOpen(false) }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveBlock}
+              disabled={saving || !blockName.trim() || !variety.trim()}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Saving...
+                </>
+              ) : editingBlock ? "Update Block" : "Add Block"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -373,10 +937,12 @@ export function SettingsForm({
   initialData,
   irrigationData,
   alertData,
+  initialBlocks = [],
 }: {
   initialData: OrchardData
   irrigationData?: IrrigationData | null
   alertData?: AlertData | null
+  initialBlocks?: PlantedBlock[]
 }) {
   const router = useRouter()
 
@@ -395,8 +961,6 @@ export function SettingsForm({
   const [latitude, setLatitude] = useState(String(initialData.latitude))
   const [longitude, setLongitude] = useState(String(initialData.longitude))
   const [elevation, setElevation] = useState(String(initialData.elevation_m))
-  const [varieties, setVarieties] = useState<string[]>(initialData.primary_varieties)
-  const [rootstock, setRootstock] = useState(initialData.rootstock)
   const [fireBlightHistory, setFireBlightHistory] = useState(initialData.fire_blight_history)
   const [bloomStage, setBloomStage] = useState(initialData.bloom_stage)
   const [petalFallDate, setPetalFallDate] = useState(initialData.petal_fall_date)
@@ -513,8 +1077,6 @@ export function SettingsForm({
           lat: parseFloat(latitude),
           lon: parseFloat(longitude),
           elevation: parseFloat(elevation),
-          varieties,
-          rootstock: rootstock || null,
           fire_blight_history: fireBlightHistory,
           bloom_stage: bloomStage,
           petal_fall_date: petalFallDate || null,
@@ -578,7 +1140,7 @@ export function SettingsForm({
       setSaving(false)
     }
   }, [
-    initialData.id, name, latitude, longitude, elevation, varieties, rootstock,
+    initialData.id, name, latitude, longitude, elevation,
     fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
     irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
     alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
@@ -652,14 +1214,15 @@ export function SettingsForm({
                   {geoError && <p className="text-[12px] text-destructive mt-1">{geoError}</p>}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Primary Varieties</Label>
-                  <VarietyTagInput varieties={varieties} onChange={setVarieties} />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Rootstock</Label>
-                  <RootstockSelector value={rootstock} onChange={setRootstock} />
+                <div className="space-y-2">
+                  <div>
+                    <Label>Planted Blocks</Label>
+                    <p className="text-caption text-muted-foreground mt-1">
+                      Define your orchard blocks with variety, rootstock, and planting details.
+                      Disease risk traits are shown based on known susceptibilities.
+                    </p>
+                  </div>
+                  <BlockManager orchardId={initialData.id} initialBlocks={initialBlocks} />
                 </div>
               </div>
             </TabsContent>
