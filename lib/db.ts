@@ -254,6 +254,37 @@ export interface PlantedBlockRow {
   created_at: string;
 }
 
+export interface OrchardBlockRow {
+  id: number;
+  orchard_id: number;
+  block_name: string;
+  total_area_ha: number | null;
+  year_established: number | null;
+  soil_type: string | null;
+  irrigation_system: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface BlockPlantingRow {
+  id: number;
+  block_id: number;
+  variety: string;
+  rootstock: string | null;
+  tree_count: number | null;
+  spacing_in_row_m: number | null;
+  spacing_between_rows_m: number | null;
+  rows_description: string | null;
+  planted_year: number | null;
+  sub_notes: string | null;
+  created_at: string;
+}
+
+/** Block with its plantings pre-loaded for UI consumption */
+export interface OrchardBlockWithPlantings extends OrchardBlockRow {
+  plantings: BlockPlantingRow[];
+}
+
 // ---------------------------------------------------------------------------
 // Singleton database instance — uses globalThis to survive Next.js module
 // re-evaluation (HMR in dev, worker respawns in standalone production).
@@ -1219,6 +1250,49 @@ const migrations: Migration[] = [
       `);
     },
   },
+
+  // -----------------------------------------------------------------------
+  // v6 — Add orchard_blocks + block_plantings (block-level + planting-level)
+  // -----------------------------------------------------------------------
+  {
+    version: 6,
+    description: "Add orchard_blocks and block_plantings tables for multi-variety blocks",
+    up(db: DatabaseType) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS orchard_blocks (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          orchard_id        INTEGER NOT NULL REFERENCES orchards(id),
+          block_name        TEXT    NOT NULL,
+          total_area_ha     REAL,
+          year_established  INTEGER,
+          soil_type         TEXT,
+          irrigation_system TEXT,
+          notes             TEXT,
+          created_at        TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_orchard_blocks_orchard
+          ON orchard_blocks(orchard_id);
+
+        CREATE TABLE IF NOT EXISTS block_plantings (
+          id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+          block_id              INTEGER NOT NULL REFERENCES orchard_blocks(id) ON DELETE CASCADE,
+          variety               TEXT    NOT NULL,
+          rootstock             TEXT,
+          tree_count            INTEGER,
+          spacing_in_row_m      REAL,
+          spacing_between_rows_m REAL,
+          rows_description      TEXT,
+          planted_year          INTEGER,
+          sub_notes             TEXT,
+          created_at            TEXT    DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_block_plantings_block
+          ON block_plantings(block_id);
+      `);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -2006,5 +2080,168 @@ export function deletePlantedBlock(id: number, orchardId: number = 1): boolean {
   const result = db.prepare(
     "DELETE FROM planted_blocks WHERE id = ? AND orchard_id = ?"
   ).run(id, orchardId);
+  return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions — orchard blocks + block plantings
+// ---------------------------------------------------------------------------
+
+export function getOrchardBlocks(orchardId: number): OrchardBlockWithPlantings[] {
+  const db = getDb();
+  const blocks = db
+    .prepare("SELECT * FROM orchard_blocks WHERE orchard_id = ? ORDER BY block_name")
+    .all(orchardId) as OrchardBlockRow[];
+
+  return blocks.map((block) => ({
+    ...block,
+    plantings: db
+      .prepare("SELECT * FROM block_plantings WHERE block_id = ? ORDER BY id")
+      .all(block.id) as BlockPlantingRow[],
+  }));
+}
+
+export function getOrchardBlock(id: number, orchardId: number = 1): OrchardBlockWithPlantings | undefined {
+  const db = getDb();
+  const block = db
+    .prepare("SELECT * FROM orchard_blocks WHERE id = ? AND orchard_id = ?")
+    .get(id, orchardId) as OrchardBlockRow | undefined;
+  if (!block) return undefined;
+  return {
+    ...block,
+    plantings: db
+      .prepare("SELECT * FROM block_plantings WHERE block_id = ? ORDER BY id")
+      .all(block.id) as BlockPlantingRow[],
+  };
+}
+
+export function insertOrchardBlock(
+  block: Omit<OrchardBlockRow, "id" | "created_at">,
+): number {
+  const db = getDb();
+  const result = db.prepare(`
+    INSERT INTO orchard_blocks (
+      orchard_id, block_name, total_area_ha, year_established,
+      soil_type, irrigation_system, notes
+    ) VALUES (
+      @orchard_id, @block_name, @total_area_ha, @year_established,
+      @soil_type, @irrigation_system, @notes
+    )
+  `).run({
+    orchard_id: block.orchard_id,
+    block_name: block.block_name,
+    total_area_ha: block.total_area_ha ?? null,
+    year_established: block.year_established ?? null,
+    soil_type: block.soil_type ?? null,
+    irrigation_system: block.irrigation_system ?? null,
+    notes: block.notes ?? null,
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export function updateOrchardBlock(
+  block: OrchardBlockRow,
+): boolean {
+  const db = getDb();
+  const result = db.prepare(`
+    UPDATE orchard_blocks SET
+      block_name = @block_name,
+      total_area_ha = @total_area_ha,
+      year_established = @year_established,
+      soil_type = @soil_type,
+      irrigation_system = @irrigation_system,
+      notes = @notes
+    WHERE id = @id AND orchard_id = @orchard_id
+  `).run({
+    id: block.id,
+    orchard_id: block.orchard_id,
+    block_name: block.block_name,
+    total_area_ha: block.total_area_ha ?? null,
+    year_established: block.year_established ?? null,
+    soil_type: block.soil_type ?? null,
+    irrigation_system: block.irrigation_system ?? null,
+    notes: block.notes ?? null,
+  });
+  return result.changes > 0;
+}
+
+export function deleteOrchardBlock(id: number, orchardId: number = 1): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    "DELETE FROM orchard_blocks WHERE id = ? AND orchard_id = ?"
+  ).run(id, orchardId);
+  return result.changes > 0;
+}
+
+export function insertBlockPlanting(
+  planting: Omit<BlockPlantingRow, "id" | "created_at">,
+): number {
+  const db = getDb();
+  const result = db.prepare(`
+    INSERT INTO block_plantings (
+      block_id, variety, rootstock, tree_count,
+      spacing_in_row_m, spacing_between_rows_m,
+      rows_description, planted_year, sub_notes
+    ) VALUES (
+      @block_id, @variety, @rootstock, @tree_count,
+      @spacing_in_row_m, @spacing_between_rows_m,
+      @rows_description, @planted_year, @sub_notes
+    )
+  `).run({
+    block_id: planting.block_id,
+    variety: planting.variety,
+    rootstock: planting.rootstock ?? null,
+    tree_count: planting.tree_count ?? null,
+    spacing_in_row_m: planting.spacing_in_row_m ?? null,
+    spacing_between_rows_m: planting.spacing_between_rows_m ?? null,
+    rows_description: planting.rows_description ?? null,
+    planted_year: planting.planted_year ?? null,
+    sub_notes: planting.sub_notes ?? null,
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export function getBlockPlanting(id: number): BlockPlantingRow | undefined {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM block_plantings WHERE id = ?")
+    .get(id) as BlockPlantingRow | undefined;
+}
+
+export function updateBlockPlanting(
+  planting: BlockPlantingRow,
+): boolean {
+  const db = getDb();
+  const result = db.prepare(`
+    UPDATE block_plantings SET
+      variety = @variety,
+      rootstock = @rootstock,
+      tree_count = @tree_count,
+      spacing_in_row_m = @spacing_in_row_m,
+      spacing_between_rows_m = @spacing_between_rows_m,
+      rows_description = @rows_description,
+      planted_year = @planted_year,
+      sub_notes = @sub_notes
+    WHERE id = @id AND block_id = @block_id
+  `).run({
+    id: planting.id,
+    block_id: planting.block_id,
+    variety: planting.variety,
+    rootstock: planting.rootstock ?? null,
+    tree_count: planting.tree_count ?? null,
+    spacing_in_row_m: planting.spacing_in_row_m ?? null,
+    spacing_between_rows_m: planting.spacing_between_rows_m ?? null,
+    rows_description: planting.rows_description ?? null,
+    planted_year: planting.planted_year ?? null,
+    sub_notes: planting.sub_notes ?? null,
+  });
+  return result.changes > 0;
+}
+
+export function deleteBlockPlanting(id: number): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    "DELETE FROM block_plantings WHERE id = ?"
+  ).run(id);
   return result.changes > 0;
 }

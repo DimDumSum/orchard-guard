@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getPlantedBlocks,
-  getPlantedBlock,
-  insertPlantedBlock,
-  updatePlantedBlock,
-  deletePlantedBlock,
+  getOrchardBlocks,
+  getOrchardBlock,
+  insertOrchardBlock,
+  updateOrchardBlock,
+  deleteOrchardBlock,
 } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
@@ -12,12 +12,12 @@ export async function GET(request: NextRequest) {
     const orchardId = Number(
       request.nextUrl.searchParams.get("orchardId") ?? 1
     );
-    const blocks = getPlantedBlocks(orchardId);
+    const blocks = getOrchardBlocks(orchardId);
     return NextResponse.json({ orchardId, blocks });
   } catch (err) {
     console.error("[orchard/blocks] GET Error:", err);
     return NextResponse.json(
-      { error: "Failed to fetch planted blocks" },
+      { error: "Failed to fetch orchard blocks" },
       { status: 500 }
     );
   }
@@ -29,42 +29,36 @@ export async function POST(request: NextRequest) {
     const {
       orchardId = 1,
       blockName,
-      variety,
-      rootstock,
-      plantedYear,
-      treeCount,
-      spacingInRowM,
-      spacingBetweenRowsM,
-      areaHa,
+      totalAreaHa,
+      yearEstablished,
+      soilType,
+      irrigationSystem,
       notes,
     } = body;
 
-    if (!blockName || !variety) {
+    if (!blockName) {
       return NextResponse.json(
-        { error: "blockName and variety are required" },
+        { error: "blockName is required" },
         { status: 400 }
       );
     }
 
-    const id = insertPlantedBlock({
+    const id = insertOrchardBlock({
       orchard_id: orchardId,
       block_name: blockName,
-      variety,
-      rootstock: rootstock || null,
-      planted_year: plantedYear ?? null,
-      tree_count: treeCount ?? null,
-      spacing_in_row_m: spacingInRowM ?? null,
-      spacing_between_rows_m: spacingBetweenRowsM ?? null,
-      area_ha: areaHa ?? null,
+      total_area_ha: totalAreaHa ?? null,
+      year_established: yearEstablished ?? null,
+      soil_type: soilType || null,
+      irrigation_system: irrigationSystem || null,
       notes: notes || null,
     });
 
-    const block = getPlantedBlock(id, orchardId);
+    const block = getOrchardBlock(id, orchardId);
     return NextResponse.json({ success: true, block }, { status: 201 });
   } catch (err) {
     console.error("[orchard/blocks] POST Error:", err);
     return NextResponse.json(
-      { error: "Failed to create planted block" },
+      { error: "Failed to create orchard block" },
       { status: 500 }
     );
   }
@@ -77,24 +71,21 @@ export async function PUT(request: NextRequest) {
       id,
       orchardId = 1,
       blockName,
-      variety,
-      rootstock,
-      plantedYear,
-      treeCount,
-      spacingInRowM,
-      spacingBetweenRowsM,
-      areaHa,
+      totalAreaHa,
+      yearEstablished,
+      soilType,
+      irrigationSystem,
       notes,
     } = body;
 
-    if (!id || !blockName || !variety) {
+    if (!id || !blockName) {
       return NextResponse.json(
-        { error: "id, blockName, and variety are required" },
+        { error: "id and blockName are required" },
         { status: 400 }
       );
     }
 
-    const existing = getPlantedBlock(id, orchardId);
+    const existing = getOrchardBlock(id, orchardId);
     if (!existing) {
       return NextResponse.json(
         { error: "Block not found" },
@@ -102,32 +93,22 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const updated = updatePlantedBlock({
+    updateOrchardBlock({
       ...existing,
       block_name: blockName,
-      variety,
-      rootstock: rootstock || null,
-      planted_year: plantedYear ?? null,
-      tree_count: treeCount ?? null,
-      spacing_in_row_m: spacingInRowM ?? null,
-      spacing_between_rows_m: spacingBetweenRowsM ?? null,
-      area_ha: areaHa ?? null,
+      total_area_ha: totalAreaHa ?? null,
+      year_established: yearEstablished ?? null,
+      soil_type: soilType || null,
+      irrigation_system: irrigationSystem || null,
       notes: notes || null,
     });
 
-    if (!updated) {
-      return NextResponse.json(
-        { error: "Block not found" },
-        { status: 404 }
-      );
-    }
-
-    const block = getPlantedBlock(id, orchardId);
+    const block = getOrchardBlock(id, orchardId);
     return NextResponse.json({ success: true, block });
   } catch (err) {
     console.error("[orchard/blocks] PUT Error:", err);
     return NextResponse.json(
-      { error: "Failed to update planted block" },
+      { error: "Failed to update orchard block" },
       { status: 500 }
     );
   }
@@ -145,7 +126,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = deletePlantedBlock(id, orchardId);
+    const deleted = deleteOrchardBlock(id, orchardId);
     if (!deleted) {
       return NextResponse.json(
         { error: "Block not found" },
@@ -157,7 +138,7 @@ export async function DELETE(request: NextRequest) {
   } catch (err) {
     console.error("[orchard/blocks] DELETE Error:", err);
     return NextResponse.json(
-      { error: "Failed to delete planted block" },
+      { error: "Failed to delete orchard block" },
       { status: 500 }
     );
   }

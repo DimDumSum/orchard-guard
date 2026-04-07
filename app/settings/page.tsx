@@ -2,7 +2,7 @@
 // OrchardGuard Settings Page — Server Component
 // ---------------------------------------------------------------------------
 
-import { getOrchard, getIrrigationConfig, getAlertPrefs, getPlantedBlocks } from "@/lib/db"
+import { getOrchard, getIrrigationConfig, getAlertPrefs, getOrchardBlocks } from "@/lib/db"
 import { SettingsForm } from "./settings-form"
 import { ExternalLink, BookOpen } from "lucide-react"
 
@@ -44,7 +44,7 @@ export default async function SettingsPage() {
       }
     : null
 
-  const plantedBlocks = orchard ? getPlantedBlocks(orchard.id) : []
+  const orchardBlocks = orchard ? getOrchardBlocks(orchard.id) : []
 
   const irrigConfig = orchard ? getIrrigationConfig(orchard.id) : null
   const irrigationData = irrigConfig
@@ -90,7 +90,7 @@ export default async function SettingsPage() {
           initialData={initialData}
           irrigationData={irrigationData}
           alertData={alertData}
-          initialBlocks={plantedBlocks}
+          initialBlocks={orchardBlocks}
         />
       ) : (
         <p className="text-body text-muted-foreground">

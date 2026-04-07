@@ -64,19 +64,31 @@ interface OrchardData {
   codling_moth_biofix_date: string
 }
 
-interface PlantedBlock {
+interface BlockPlanting {
   id: number
-  orchard_id: number
-  block_name: string
+  block_id: number
   variety: string
   rootstock: string | null
-  planted_year: number | null
   tree_count: number | null
   spacing_in_row_m: number | null
   spacing_between_rows_m: number | null
-  area_ha: number | null
+  rows_description: string | null
+  planted_year: number | null
+  sub_notes: string | null
+  created_at: string
+}
+
+interface OrchardBlock {
+  id: number
+  orchard_id: number
+  block_name: string
+  total_area_ha: number | null
+  year_established: number | null
+  soil_type: string | null
+  irrigation_system: string | null
   notes: string | null
   created_at: string
+  plantings: BlockPlanting[]
 }
 
 interface IrrigationData {
@@ -497,85 +509,153 @@ function SearchableCombobox({
 }
 
 // ---------------------------------------------------------------------------
-// Block Manager — replaces VarietyTagInput + RootstockSelector
+// Block Manager — blocks contain multiple plantings (variety + rootstock)
 // ---------------------------------------------------------------------------
 
-function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initialBlocks: PlantedBlock[] }) {
-  const [blocks, setBlocks] = useState<PlantedBlock[]>(initialBlocks)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingBlock, setEditingBlock] = useState<PlantedBlock | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
-  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const BLOCK_SOIL_TYPES = [
+  { value: "sand", label: "Sand" },
+  { value: "loamy-sand", label: "Loamy Sand" },
+  { value: "sandy-loam", label: "Sandy Loam" },
+  { value: "loam", label: "Loam" },
+  { value: "clay-loam", label: "Clay Loam" },
+  { value: "clay", label: "Clay" },
+] as const
 
-  // Form fields
+const BLOCK_IRRIGATION_TYPES = [
+  { value: "drip", label: "Drip" },
+  { value: "micro-sprinkler", label: "Micro-sprinkler" },
+  { value: "overhead", label: "Overhead" },
+  { value: "none", label: "None (rain-fed)" },
+] as const
+
+function getPlantingTraits(planting: BlockPlanting) {
+  const traits: { label: string; level: string; icon: string }[] = []
+  const varietyInfo = APPLE_VARIETIES.find((v) => v.name === planting.variety)
+  const rootstockInfo = ROOTSTOCK_DATA.find((r) => r.name === planting.rootstock)
+
+  if (varietyInfo) {
+    for (const [key, level] of Object.entries(varietyInfo.traits)) {
+      if (level === "high" || level === "very_high" || level === "susceptible") {
+        traits.push({ label: TRAIT_LABELS[key] ?? key, level, icon: TRAIT_ICONS[level] ?? "" })
+      }
+    }
+  }
+  if (rootstockInfo) {
+    for (const [key, level] of Object.entries(rootstockInfo.traits)) {
+      if (level === "very_susceptible" || level === "susceptible") {
+        traits.push({ label: `${TRAIT_LABELS[key] ?? key}`, level, icon: TRAIT_ICONS[level] ?? "" })
+      }
+      if (level === "resistant" || level === "tolerant") {
+        traits.push({ label: `${TRAIT_LABELS[key] ?? key}`, level, icon: TRAIT_ICONS[level] ?? "" })
+      }
+    }
+  }
+
+  const order: Record<string, number> = { very_high: 0, very_susceptible: 0, susceptible: 1, high: 1, moderate: 2, tolerant: 3, resistant: 4, low: 5 }
+  traits.sort((a, b) => (order[a.level] ?? 3) - (order[b.level] ?? 3))
+  return traits.slice(0, 4)
+}
+
+const VARIETY_GROUPS = (["early", "mid", "late", "heritage"] as const).map((season) => ({
+  label: SEASON_LABELS[season],
+  items: APPLE_VARIETIES.filter((v) => v.season === season).map((v) => ({
+    value: v.name,
+    description: Object.entries(v.traits)
+      .filter(([, level]) => level === "high" || level === "very_high" || level === "susceptible")
+      .map(([key]) => TRAIT_LABELS[key])
+      .join(", ") || undefined,
+  })),
+}))
+
+const ROOTSTOCK_GROUPS = (["dwarfing", "semi-dwarfing", "semi-vigorous", "vigorous"] as const).map((vigor) => ({
+  label: VIGOR_LABELS[vigor],
+  items: ROOTSTOCK_DATA.filter((r) => r.vigor === vigor).map((r) => ({
+    value: r.name,
+    description: `${r.sizePercent}% standard size \u2014 ${r.description}`,
+  })),
+}))
+
+function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initialBlocks: OrchardBlock[] }) {
+  const [blocks, setBlocks] = useState<OrchardBlock[]>(initialBlocks)
+
+  // Block dialog state
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false)
+  const [editingBlock, setEditingBlock] = useState<OrchardBlock | null>(null)
+  const [blockSaving, setBlockSaving] = useState(false)
   const [blockName, setBlockName] = useState("")
+  const [totalAreaHa, setTotalAreaHa] = useState("")
+  const [yearEstablished, setYearEstablished] = useState("")
+  const [blockSoilType, setBlockSoilType] = useState("")
+  const [blockIrrigation, setBlockIrrigation] = useState("")
+  const [blockNotes, setBlockNotes] = useState("")
+
+  // Planting dialog state
+  const [plantingDialogOpen, setPlantingDialogOpen] = useState(false)
+  const [plantingBlockId, setPlantingBlockId] = useState<number | null>(null)
+  const [editingPlanting, setEditingPlanting] = useState<BlockPlanting | null>(null)
+  const [plantingSaving, setPlantingSaving] = useState(false)
   const [variety, setVariety] = useState("")
   const [rootstock, setRootstock] = useState("")
-  const [plantedYear, setPlantedYear] = useState("")
   const [treeCount, setTreeCount] = useState("")
   const [spacingInRow, setSpacingInRow] = useState("")
   const [spacingBetweenRows, setSpacingBetweenRows] = useState("")
-  const [areaHa, setAreaHa] = useState("")
-  const [blockNotes, setBlockNotes] = useState("")
+  const [rowsDescription, setRowsDescription] = useState("")
+  const [plantedYear, setPlantedYear] = useState("")
+  const [subNotes, setSubNotes] = useState("")
 
-  function resetForm() {
+  // Delete confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Expanded blocks
+  const [expandedBlocks, setExpandedBlocks] = useState<Set<number>>(() => new Set(initialBlocks.map((b) => b.id)))
+
+  function toggleExpand(id: number) {
+    setExpandedBlocks((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  // Block form helpers
+  function resetBlockForm() {
     setBlockName("")
-    setVariety("")
-    setRootstock("")
-    setPlantedYear("")
-    setTreeCount("")
-    setSpacingInRow("")
-    setSpacingBetweenRows("")
-    setAreaHa("")
+    setTotalAreaHa("")
+    setYearEstablished("")
+    setBlockSoilType("")
+    setBlockIrrigation("")
     setBlockNotes("")
     setEditingBlock(null)
   }
 
-  function openAdd() {
-    resetForm()
-    setDialogOpen(true)
+  function openAddBlock() {
+    resetBlockForm()
+    setBlockDialogOpen(true)
   }
 
-  function openEdit(block: PlantedBlock) {
+  function openEditBlock(block: OrchardBlock) {
     setEditingBlock(block)
     setBlockName(block.block_name)
-    setVariety(block.variety)
-    setRootstock(block.rootstock ?? "")
-    setPlantedYear(block.planted_year ? String(block.planted_year) : "")
-    setTreeCount(block.tree_count ? String(block.tree_count) : "")
-    setSpacingInRow(block.spacing_in_row_m ? String(block.spacing_in_row_m) : "")
-    setSpacingBetweenRows(block.spacing_between_rows_m ? String(block.spacing_between_rows_m) : "")
-    setAreaHa(block.area_ha ? String(block.area_ha) : "")
+    setTotalAreaHa(block.total_area_ha ? String(block.total_area_ha) : "")
+    setYearEstablished(block.year_established ? String(block.year_established) : "")
+    setBlockSoilType(block.soil_type ?? "")
+    setBlockIrrigation(block.irrigation_system ?? "")
     setBlockNotes(block.notes ?? "")
-    setDialogOpen(true)
+    setBlockDialogOpen(true)
   }
 
-  // Auto-calculate area from tree count and spacing
-  const computedArea = (() => {
-    const count = parseInt(treeCount)
-    const inRow = parseFloat(spacingInRow)
-    const betweenRows = parseFloat(spacingBetweenRows)
-    if (count > 0 && inRow > 0 && betweenRows > 0) {
-      return ((count * inRow * betweenRows) / 10000).toFixed(2)
-    }
-    return null
-  })()
-
   async function handleSaveBlock() {
-    if (!blockName.trim() || !variety.trim()) return
-    setSaving(true)
+    if (!blockName.trim()) return
+    setBlockSaving(true)
     try {
       const payload = {
         orchardId,
         blockName: blockName.trim(),
-        variety: variety.trim(),
-        rootstock: rootstock.trim() || null,
-        plantedYear: plantedYear ? parseInt(plantedYear) : null,
-        treeCount: treeCount ? parseInt(treeCount) : null,
-        spacingInRowM: spacingInRow ? parseFloat(spacingInRow) : null,
-        spacingBetweenRowsM: spacingBetweenRows ? parseFloat(spacingBetweenRows) : null,
-        areaHa: areaHa ? parseFloat(areaHa) : computedArea ? parseFloat(computedArea) : null,
+        totalAreaHa: totalAreaHa ? parseFloat(totalAreaHa) : null,
+        yearEstablished: yearEstablished ? parseInt(yearEstablished) : null,
+        soilType: blockSoilType || null,
+        irrigationSystem: blockIrrigation || null,
         notes: blockNotes.trim() || null,
       }
 
@@ -597,163 +677,289 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
         if (!res.ok) throw new Error("Failed to create block")
         const data = await res.json()
         setBlocks((prev) => [...prev, data.block])
+        setExpandedBlocks((prev) => new Set([...prev, data.block.id]))
       }
-      setDialogOpen(false)
-      resetForm()
+      setBlockDialogOpen(false)
+      resetBlockForm()
     } catch (err) {
       console.error(err)
     } finally {
-      setSaving(false)
+      setBlockSaving(false)
     }
   }
 
-  async function handleDelete(id: number) {
-    if (deleteConfirmId !== id) {
-      setDeleteConfirmId(id)
+  // Planting form helpers
+  function resetPlantingForm() {
+    setVariety("")
+    setRootstock("")
+    setTreeCount("")
+    setSpacingInRow("")
+    setSpacingBetweenRows("")
+    setRowsDescription("")
+    setPlantedYear("")
+    setSubNotes("")
+    setEditingPlanting(null)
+    setPlantingBlockId(null)
+  }
+
+  function openAddPlanting(blockId: number) {
+    resetPlantingForm()
+    setPlantingBlockId(blockId)
+    setPlantingDialogOpen(true)
+  }
+
+  function openEditPlanting(planting: BlockPlanting) {
+    setEditingPlanting(planting)
+    setPlantingBlockId(planting.block_id)
+    setVariety(planting.variety)
+    setRootstock(planting.rootstock ?? "")
+    setTreeCount(planting.tree_count ? String(planting.tree_count) : "")
+    setSpacingInRow(planting.spacing_in_row_m ? String(planting.spacing_in_row_m) : "")
+    setSpacingBetweenRows(planting.spacing_between_rows_m ? String(planting.spacing_between_rows_m) : "")
+    setRowsDescription(planting.rows_description ?? "")
+    setPlantedYear(planting.planted_year ? String(planting.planted_year) : "")
+    setSubNotes(planting.sub_notes ?? "")
+    setPlantingDialogOpen(true)
+  }
+
+  async function handleSavePlanting() {
+    if (!variety.trim() || !plantingBlockId) return
+    setPlantingSaving(true)
+    try {
+      const payload = {
+        blockId: plantingBlockId,
+        variety: variety.trim(),
+        rootstock: rootstock.trim() || null,
+        treeCount: treeCount ? parseInt(treeCount) : null,
+        spacingInRowM: spacingInRow ? parseFloat(spacingInRow) : null,
+        spacingBetweenRowsM: spacingBetweenRows ? parseFloat(spacingBetweenRows) : null,
+        rowsDescription: rowsDescription.trim() || null,
+        plantedYear: plantedYear ? parseInt(plantedYear) : null,
+        subNotes: subNotes.trim() || null,
+      }
+
+      if (editingPlanting) {
+        const res = await fetch("/api/orchard/plantings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingPlanting.id, ...payload }),
+        })
+        if (!res.ok) throw new Error("Failed to update planting")
+        const data = await res.json()
+        setBlocks((prev) => prev.map((b) =>
+          b.id === plantingBlockId
+            ? { ...b, plantings: b.plantings.map((p) => (p.id === editingPlanting.id ? data.planting : p)) }
+            : b
+        ))
+      } else {
+        const res = await fetch("/api/orchard/plantings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error("Failed to create planting")
+        const data = await res.json()
+        setBlocks((prev) => prev.map((b) =>
+          b.id === plantingBlockId
+            ? { ...b, plantings: [...b.plantings, data.planting] }
+            : b
+        ))
+      }
+      setPlantingDialogOpen(false)
+      resetPlantingForm()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setPlantingSaving(false)
+    }
+  }
+
+  // Generic delete handler for both blocks and plantings
+  function confirmDelete(key: string, action: () => Promise<void>) {
+    if (deleteConfirmId !== key) {
+      setDeleteConfirmId(key)
       if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
       deleteTimerRef.current = setTimeout(() => setDeleteConfirmId(null), 3000)
       return
     }
     setDeleteConfirmId(null)
-    try {
-      const res = await fetch("/api/orchard/blocks", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, orchardId }),
-      })
-      if (!res.ok) throw new Error("Failed to delete block")
-      setBlocks((prev) => prev.filter((b) => b.id !== id))
-    } catch (err) {
-      console.error(err)
-    }
+    action().catch(console.error)
   }
 
-  const varietyGroups = (["early", "mid", "late", "heritage"] as const).map((season) => ({
-    label: SEASON_LABELS[season],
-    items: APPLE_VARIETIES.filter((v) => v.season === season).map((v) => ({
-      value: v.name,
-      description: Object.entries(v.traits)
-        .filter(([, level]) => level === "high" || level === "very_high" || level === "susceptible")
-        .map(([key]) => TRAIT_LABELS[key])
-        .join(", ") || undefined,
-    })),
-  }))
+  async function handleDeleteBlock(id: number) {
+    const res = await fetch("/api/orchard/blocks", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, orchardId }),
+    })
+    if (!res.ok) throw new Error("Failed to delete block")
+    setBlocks((prev) => prev.filter((b) => b.id !== id))
+  }
 
-  const rootstockGroups = (["dwarfing", "semi-dwarfing", "semi-vigorous", "vigorous"] as const).map((vigor) => ({
-    label: VIGOR_LABELS[vigor],
-    items: ROOTSTOCK_DATA.filter((r) => r.vigor === vigor).map((r) => ({
-      value: r.name,
-      description: `${r.sizePercent}% standard size \u2014 ${r.description}`,
-    })),
-  }))
-
-  function getBlockTraits(block: PlantedBlock) {
-    const traits: { label: string; level: string; icon: string }[] = []
-    const varietyInfo = APPLE_VARIETIES.find((v) => v.name === block.variety)
-    const rootstockInfo = ROOTSTOCK_DATA.find((r) => r.name === block.rootstock)
-
-    if (varietyInfo) {
-      for (const [key, level] of Object.entries(varietyInfo.traits)) {
-        if (level === "high" || level === "very_high" || level === "susceptible") {
-          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.variety})`, level, icon: TRAIT_ICONS[level] ?? "" })
-        }
-        if (level === "resistant" || level === "tolerant") {
-          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.variety})`, level, icon: TRAIT_ICONS[level] ?? "" })
-        }
-      }
-    }
-    if (rootstockInfo) {
-      for (const [key, level] of Object.entries(rootstockInfo.traits)) {
-        if (level === "resistant" || level === "tolerant") {
-          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.rootstock})`, level, icon: TRAIT_ICONS[level] ?? "" })
-        }
-        if (level === "very_susceptible" || level === "susceptible") {
-          traits.push({ label: `${TRAIT_LABELS[key] ?? key} (${block.rootstock})`, level, icon: TRAIT_ICONS[level] ?? "" })
-        }
-      }
-    }
-
-    // Sort: warnings first, then positives
-    const order: Record<string, number> = { very_high: 0, very_susceptible: 0, susceptible: 1, high: 1, moderate: 2, tolerant: 3, resistant: 4, low: 5 }
-    traits.sort((a, b) => (order[a.level] ?? 3) - (order[b.level] ?? 3))
-    return traits.slice(0, 6)
+  async function handleDeletePlanting(plantingId: number, blockId: number) {
+    const res = await fetch("/api/orchard/plantings", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: plantingId }),
+    })
+    if (!res.ok) throw new Error("Failed to delete planting")
+    setBlocks((prev) => prev.map((b) =>
+      b.id === blockId
+        ? { ...b, plantings: b.plantings.filter((p) => p.id !== plantingId) }
+        : b
+    ))
   }
 
   return (
     <div className="space-y-3">
       {/* Block cards */}
-      <div className="grid grid-cols-1 gap-3">
-        {blocks.map((block) => {
-          const traits = getBlockTraits(block)
-          return (
-            <div key={block.id} className="rounded-xl border border-border bg-card p-4 space-y-2.5">
+      {blocks.map((block) => {
+        const totalTrees = block.plantings.reduce((sum, p) => sum + (p.tree_count ?? 0), 0)
+        const isExpanded = expandedBlocks.has(block.id)
+
+        return (
+          <div key={block.id} className="rounded-xl border border-border bg-card overflow-hidden">
+            {/* Block header */}
+            <div className="p-4">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-[14px] font-semibold text-foreground truncate">
-                    {block.block_name}
-                    <span className="font-normal text-bark-400">
-                      {" \u2014 "}{block.variety}{block.rootstock ? ` on ${block.rootstock}` : ""}
-                    </span>
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-bark-400 mt-0.5">
-                    {block.planted_year && <span>Planted {block.planted_year}</span>}
-                    {block.area_ha && <span>{block.area_ha} ha</span>}
-                    {block.tree_count && <span>{block.tree_count.toLocaleString()} trees</span>}
-                    {block.spacing_in_row_m && block.spacing_between_rows_m && (
-                      <span>{block.spacing_in_row_m}m &times; {block.spacing_between_rows_m}m</span>
-                    )}
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(block.id)}
+                  className="flex items-start gap-2 min-w-0 text-left cursor-pointer"
+                >
+                  <ChevronDown className={cn("size-4 mt-0.5 shrink-0 transition-transform text-bark-400", isExpanded && "rotate-180")} />
+                  <div className="min-w-0">
+                    <h3 className="text-[14px] font-semibold text-foreground">
+                      {block.block_name}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-bark-400 mt-0.5">
+                      {block.total_area_ha && <span>{block.total_area_ha} ha</span>}
+                      {block.soil_type && <span>{BLOCK_SOIL_TYPES.find((s) => s.value === block.soil_type)?.label ?? block.soil_type}</span>}
+                      {block.irrigation_system && <span>{BLOCK_IRRIGATION_TYPES.find((t) => t.value === block.irrigation_system)?.label ?? block.irrigation_system}</span>}
+                      {block.year_established && <span>Est. {block.year_established}</span>}
+                    </div>
+                    <p className="text-[12px] text-bark-400 mt-0.5">
+                      {block.plantings.length} {block.plantings.length === 1 ? "planting" : "plantings"}
+                      {totalTrees > 0 && <> &middot; {totalTrees.toLocaleString()} trees total</>}
+                    </p>
                   </div>
-                </div>
+                </button>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={() => openEdit(block)}
+                    onClick={() => openEditBlock(block)}
                     className="p-1.5 rounded-md hover:bg-white/5 text-bark-400 hover:text-foreground transition-colors cursor-pointer"
+                    title="Edit block"
                   >
                     <Pencil className="size-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(block.id)}
+                    onClick={() => confirmDelete(`block-${block.id}`, () => handleDeleteBlock(block.id))}
                     className={cn(
                       "p-1.5 rounded-md transition-colors cursor-pointer",
-                      deleteConfirmId === block.id
+                      deleteConfirmId === `block-${block.id}`
                         ? "bg-red-500/20 text-red-400"
                         : "hover:bg-white/5 text-bark-400 hover:text-foreground",
                     )}
-                    title={deleteConfirmId === block.id ? "Click again to confirm delete" : "Delete block"}
+                    title={deleteConfirmId === `block-${block.id}` ? "Click again to confirm" : "Delete block"}
                   >
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
               </div>
               {block.notes && (
-                <p className="text-[12px] text-bark-400 italic">{block.notes}</p>
-              )}
-              {traits.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {traits.map((t, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                        TRAIT_COLORS[t.level] ?? "bg-zinc-500/15 text-zinc-400",
-                      )}
-                    >
-                      {t.icon} {t.label}
-                    </span>
-                  ))}
-                </div>
+                <p className="text-[12px] text-bark-400 italic mt-1.5 ml-6">{block.notes}</p>
               )}
             </div>
-          )
-        })}
-      </div>
+
+            {/* Plantings list (expanded) */}
+            {isExpanded && (
+              <div className="border-t border-border">
+                {block.plantings.map((planting) => {
+                  const traits = getPlantingTraits(planting)
+                  return (
+                    <div key={planting.id} className="px-4 py-3 border-b border-border last:border-b-0 hover:bg-white/[0.02]">
+                      <div className="flex items-start justify-between gap-2 ml-6">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium text-foreground">
+                            {planting.variety}
+                            {planting.rootstock && <span className="text-bark-400 font-normal"> / {planting.rootstock}</span>}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-bark-400 mt-0.5">
+                            {planting.tree_count && <span>{planting.tree_count.toLocaleString()} trees</span>}
+                            {planting.rows_description && <span>{planting.rows_description}</span>}
+                            {planting.planted_year && <span>Planted {planting.planted_year}</span>}
+                            {planting.spacing_in_row_m && planting.spacing_between_rows_m && (
+                              <span>{planting.spacing_in_row_m}m &times; {planting.spacing_between_rows_m}m</span>
+                            )}
+                          </div>
+                          {traits.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {traits.map((t, i) => (
+                                <span
+                                  key={i}
+                                  className={cn(
+                                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0 text-[10px] font-medium",
+                                    TRAIT_COLORS[t.level] ?? "bg-zinc-500/15 text-zinc-400",
+                                  )}
+                                >
+                                  {t.icon} {t.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {planting.sub_notes && (
+                            <p className="text-[11px] text-bark-400 italic mt-1">{planting.sub_notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditPlanting(planting)}
+                            className="p-1 rounded-md hover:bg-white/5 text-bark-400 hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            <Pencil className="size-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => confirmDelete(`planting-${planting.id}`, () => handleDeletePlanting(planting.id, block.id))}
+                            className={cn(
+                              "p-1 rounded-md transition-colors cursor-pointer",
+                              deleteConfirmId === `planting-${planting.id}`
+                                ? "bg-red-500/20 text-red-400"
+                                : "hover:bg-white/5 text-bark-400 hover:text-foreground",
+                            )}
+                          >
+                            <Trash2 className="size-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Add Planting button inside block */}
+                <div className="px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => openAddPlanting(block.id)}
+                    className="ml-6 inline-flex items-center gap-1.5 text-[12px] text-bark-400 hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <Plus className="size-3.5" />
+                    Add Planting
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {/* Add block button */}
       <button
         type="button"
-        onClick={openAdd}
+        onClick={openAddBlock}
         className="w-full rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-transparent p-4 flex items-center justify-center gap-2 text-[13px] text-bark-400 hover:text-primary transition-colors cursor-pointer"
       >
         <Plus className="size-4" />
@@ -761,12 +967,12 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
       </button>
 
       {/* Block form dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open) }}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <Dialog open={blockDialogOpen} onOpenChange={(open) => { if (!open) resetBlockForm(); setBlockDialogOpen(open) }}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingBlock ? "Edit Block" : "Add Block"}</DialogTitle>
             <DialogDescription>
-              Define a planting block with variety, rootstock, and spacing details.
+              A block is a physical area of your orchard. Add plantings inside it after creating.
             </DialogDescription>
           </DialogHeader>
 
@@ -780,90 +986,50 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Variety <span className="text-red-400">*</span></Label>
-              <SearchableCombobox
-                value={variety}
-                onChange={setVariety}
-                placeholder="Search varieties..."
-                groups={varietyGroups}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Rootstock</Label>
-              <SearchableCombobox
-                value={rootstock}
-                onChange={setRootstock}
-                placeholder="Search rootstocks..."
-                groups={rootstockGroups}
-              />
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Year Planted</Label>
+                <Label>Total Area (ha)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0.01}
+                  value={totalAreaHa}
+                  onChange={(e) => setTotalAreaHa(e.target.value)}
+                  placeholder="e.g. 2.4"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Year Established</Label>
                 <Input
                   type="number"
                   min={1900}
                   max={new Date().getFullYear()}
-                  value={plantedYear}
-                  onChange={(e) => setPlantedYear(e.target.value)}
-                  placeholder="e.g. 2018"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Tree Count</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={treeCount}
-                  onChange={(e) => setTreeCount(e.target.value)}
-                  placeholder="e.g. 1200"
+                  value={yearEstablished}
+                  onChange={(e) => setYearEstablished(e.target.value)}
+                  placeholder="e.g. 2015"
                 />
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Spacing In Row (m)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min={0.1}
-                  value={spacingInRow}
-                  onChange={(e) => setSpacingInRow(e.target.value)}
-                  placeholder="e.g. 1.0"
-                />
+                <Label>Soil Type</Label>
+                <Select value={blockSoilType} onValueChange={(v) => v && setBlockSoilType(v)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select soil..." /></SelectTrigger>
+                  <SelectContent>
+                    {BLOCK_SOIL_TYPES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Spacing Between Rows (m)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min={0.1}
-                  value={spacingBetweenRows}
-                  onChange={(e) => setSpacingBetweenRows(e.target.value)}
-                  placeholder="e.g. 4.0"
-                />
+                <Label>Irrigation</Label>
+                <Select value={blockIrrigation} onValueChange={(v) => v && setBlockIrrigation(v)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                  <SelectContent>
+                    {BLOCK_IRRIGATION_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Area (ha)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min={0.01}
-                value={areaHa || (computedArea ?? "")}
-                onChange={(e) => setAreaHa(e.target.value)}
-                placeholder={computedArea ? `Auto-calculated: ${computedArea} ha` : "e.g. 1.2"}
-              />
-              {computedArea && !areaHa && (
-                <p className="text-[11px] text-muted-foreground">
-                  Auto-calculated from {treeCount} trees at {spacingInRow}m &times; {spacingBetweenRows}m
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -877,19 +1043,94 @@ function BlockManager({ orchardId, initialBlocks }: { orchardId: number; initial
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { resetForm(); setDialogOpen(false) }}>
+            <Button variant="outline" onClick={() => { resetBlockForm(); setBlockDialogOpen(false) }}>
               Cancel
             </Button>
-            <Button
-              onClick={handleSaveBlock}
-              disabled={saving || !blockName.trim() || !variety.trim()}
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : editingBlock ? "Update Block" : "Add Block"}
+            <Button onClick={handleSaveBlock} disabled={blockSaving || !blockName.trim()}>
+              {blockSaving ? <><Loader2 className="mr-2 size-4 animate-spin" />Saving...</> : editingBlock ? "Update Block" : "Add Block"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Planting form dialog */}
+      <Dialog open={plantingDialogOpen} onOpenChange={(open) => { if (!open) resetPlantingForm(); setPlantingDialogOpen(open) }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingPlanting ? "Edit Planting" : "Add Planting"}</DialogTitle>
+            <DialogDescription>
+              A planting is a variety + rootstock combination within a block.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Variety <span className="text-red-400">*</span></Label>
+              <SearchableCombobox
+                value={variety}
+                onChange={setVariety}
+                placeholder="Search varieties..."
+                groups={VARIETY_GROUPS}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Rootstock</Label>
+              <SearchableCombobox
+                value={rootstock}
+                onChange={setRootstock}
+                placeholder="Search rootstocks..."
+                groups={ROOTSTOCK_GROUPS}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Tree Count</Label>
+                <Input type="number" min={1} value={treeCount} onChange={(e) => setTreeCount(e.target.value)} placeholder="e.g. 1200" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Year Planted</Label>
+                <Input type="number" min={1900} max={new Date().getFullYear()} value={plantedYear} onChange={(e) => setPlantedYear(e.target.value)} placeholder="e.g. 2018" />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Spacing In Row (m)</Label>
+                <Input type="number" step="0.1" min={0.1} value={spacingInRow} onChange={(e) => setSpacingInRow(e.target.value)} placeholder="e.g. 1.0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Between Rows (m)</Label>
+                <Input type="number" step="0.1" min={0.1} value={spacingBetweenRows} onChange={(e) => setSpacingBetweenRows(e.target.value)} placeholder="e.g. 4.0" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Rows</Label>
+              <Input
+                value={rowsDescription}
+                onChange={(e) => setRowsDescription(e.target.value)}
+                placeholder='e.g. "rows 1-12", "south end"'
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes</Label>
+              <Input
+                value={subNotes}
+                onChange={(e) => setSubNotes(e.target.value)}
+                placeholder="Optional notes about this planting"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { resetPlantingForm(); setPlantingDialogOpen(false) }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePlanting} disabled={plantingSaving || !variety.trim()}>
+              {plantingSaving ? <><Loader2 className="mr-2 size-4 animate-spin" />Saving...</> : editingPlanting ? "Update Planting" : "Add Planting"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -942,7 +1183,7 @@ export function SettingsForm({
   initialData: OrchardData
   irrigationData?: IrrigationData | null
   alertData?: AlertData | null
-  initialBlocks?: PlantedBlock[]
+  initialBlocks?: OrchardBlock[]
 }) {
   const router = useRouter()
 
