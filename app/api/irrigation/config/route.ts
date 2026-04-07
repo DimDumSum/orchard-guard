@@ -11,7 +11,7 @@ const VALID_SOIL_TYPES: SoilType[] = [
   "sand", "loamy-sand", "sandy-loam", "loam", "clay-loam", "clay",
 ]
 const VALID_IRRIGATION_TYPES: IrrigationType[] = [
-  "drip", "micro-sprinkler", "overhead", "none",
+  "drip", "micro-sprinkler", "overhead", "travelling-gun", "none",
 ]
 
 export async function GET() {
@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     management_allowable_depletion,
     irrigation_type,
     irrigation_rate_mm_per_hour,
+    irrigation_system_specs,
     water_cost_per_m3,
     block_area_ha,
     notes,
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
     management_allowable_depletion: management_allowable_depletion ?? 0.5,
     irrigation_type: (irrigation_type ?? "none") as IrrigationType,
     irrigation_rate_mm_per_hour: irrigation_rate_mm_per_hour ?? 4,
+    irrigation_system_specs: irrigation_system_specs ?? null,
     water_cost_per_m3: water_cost_per_m3 ?? 0.06,
     block_area_ha: block_area_ha ?? 1.0,
     notes: notes ?? null,

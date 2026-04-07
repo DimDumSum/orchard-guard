@@ -99,6 +99,7 @@ interface IrrigationData {
   management_allowable_depletion: number
   irrigation_type: string
   irrigation_rate_mm_per_hour: number
+  irrigation_system_specs: string | null
   water_cost_per_m3: number
   block_area_ha: number
   available_water_mm: number
@@ -132,6 +133,7 @@ const IRRIGATION_TYPES = [
   { value: "drip", label: "Drip" },
   { value: "micro-sprinkler", label: "Micro-sprinkler" },
   { value: "overhead", label: "Overhead Sprinkler" },
+  { value: "travelling-gun", label: "Travelling Gun" },
   { value: "none", label: "None (rain-fed)" },
 ] as const
 
@@ -140,7 +142,7 @@ const SOIL_AWC: Record<string, number> = {
 }
 
 const SYSTEM_EFF: Record<string, number> = {
-  drip: 0.90, "micro-sprinkler": 0.80, overhead: 0.70, none: 1.0,
+  drip: 0.90, "micro-sprinkler": 0.80, overhead: 0.70, "travelling-gun": 0.65, none: 1.0,
 }
 
 const BLOOM_STAGES = [
@@ -1243,6 +1245,158 @@ export function SettingsForm({
   const [waterCost, setWaterCost] = useState(String(irrigationData?.water_cost_per_m3 ?? 0.06))
   const [blockArea, setBlockArea] = useState(String(irrigationData?.block_area_ha ?? 1.0))
 
+  // Hardware specs — parsed from JSON on load
+  const initSpecs = useMemo(() => {
+    try { return irrigationData?.irrigation_system_specs ? JSON.parse(irrigationData.irrigation_system_specs) : {} }
+    catch { return {} }
+  }, [irrigationData?.irrigation_system_specs])
+
+  // Drip
+  const [dripEmitterFlow, setDripEmitterFlow] = useState(String(initSpecs.emitter_flow_rate_lph ?? ""))
+  const [dripEmitterSpacing, setDripEmitterSpacing] = useState(String(initSpecs.emitter_spacing_cm ?? ""))
+  const [dripLinesPerRow, setDripLinesPerRow] = useState(String(initSpecs.drip_lines_per_row ?? "1"))
+  const [dripRowLength, setDripRowLength] = useState(String(initSpecs.row_length_m ?? ""))
+  const [dripNumRows, setDripNumRows] = useState(String(initSpecs.num_rows ?? ""))
+  const [dripRowSpacing, setDripRowSpacing] = useState(String(initSpecs.row_spacing_m ?? ""))
+
+  // Micro-sprinkler
+  const [microFlowRate, setMicroFlowRate] = useState(String(initSpecs.sprinkler_flow_rate_lph ?? ""))
+  const [microTreesPerSprinkler, setMicroTreesPerSprinkler] = useState(String(initSpecs.trees_per_sprinkler ?? "1"))
+  const [microWettedDiam, setMicroWettedDiam] = useState(String(initSpecs.wetted_diameter_m ?? ""))
+  const [microTreeSpacing, setMicroTreeSpacing] = useState(String(initSpecs.tree_spacing_m ?? ""))
+  const [microRowSpacing, setMicroRowSpacing] = useState(String(initSpecs.row_spacing_m ?? ""))
+  const [microNumTrees, setMicroNumTrees] = useState(String(initSpecs.num_trees ?? ""))
+
+  // Overhead
+  const [overheadModel, setOverheadModel] = useState(String(initSpecs.sprinkler_model ?? ""))
+  const [overheadFlowRate, setOverheadFlowRate] = useState(String(initSpecs.flow_rate_per_head_lpm ?? ""))
+  const [overheadHeadSpacing, setOverheadHeadSpacing] = useState(String(initSpecs.head_spacing_m ?? ""))
+  const [overheadLateralSpacing, setOverheadLateralSpacing] = useState(String(initSpecs.lateral_spacing_m ?? ""))
+  const [overheadPressure, setOverheadPressure] = useState(String(initSpecs.operating_pressure_kpa ?? ""))
+  const [overheadFrostProtection, setOverheadFrostProtection] = useState(initSpecs.frost_protection ?? false)
+
+  // Travelling gun
+  const [gunFlowRate, setGunFlowRate] = useState(String(initSpecs.flow_rate_lpm ?? ""))
+  const [gunLaneSpacing, setGunLaneSpacing] = useState(String(initSpecs.lane_spacing_m ?? ""))
+  const [gunTravelSpeed, setGunTravelSpeed] = useState(String(initSpecs.travel_speed_m_per_hr ?? ""))
+  const [gunWettedWidth, setGunWettedWidth] = useState(String(initSpecs.wetted_width_m ?? ""))
+
+  // Auto-calculate precipitation rate from hardware specs
+  type DripCalc = { type: "drip"; precipRate: number; emittersPerRow: number; totalEmitters: number; totalFlowLph: number; blockAreaM2: number }
+  type MicroCalc = { type: "micro"; precipRate: number; numSprinklers: number; totalFlowLph: number }
+  type SimpleCalc = { type: "simple"; precipRate: number }
+  type CalcResult = DripCalc | MicroCalc | SimpleCalc
+
+  const calculatedRate: CalcResult | null = useMemo(() => {
+    if (irrigType === "drip") {
+      const flow = parseFloat(dripEmitterFlow)
+      const spacing = parseFloat(dripEmitterSpacing) / 100 // cm → m
+      const lines = parseInt(dripLinesPerRow) || 1
+      const rowLen = parseFloat(dripRowLength)
+      const rows = parseInt(dripNumRows)
+      const rowSpc = parseFloat(dripRowSpacing)
+      if (!flow || !spacing || !rowLen || !rows || !rowSpc) return null
+      const emittersPerRow = Math.floor(rowLen / spacing) * lines
+      const totalEmitters = emittersPerRow * rows
+      const totalFlowLph = totalEmitters * flow
+      const blockAreaM2 = rowLen * rowSpc * rows
+      const precipRate = totalFlowLph / blockAreaM2
+      return { type: "drip", precipRate, emittersPerRow, totalEmitters, totalFlowLph, blockAreaM2 }
+    }
+    if (irrigType === "micro-sprinkler") {
+      const flow = parseFloat(microFlowRate)
+      const treesPerSpr = parseInt(microTreesPerSprinkler) || 1
+      const treeSpc = parseFloat(microTreeSpacing)
+      const rowSpc = parseFloat(microRowSpacing)
+      const numTrees = parseInt(microNumTrees)
+      if (!flow || !treeSpc || !rowSpc) return null
+      const precipRate = flow / (treeSpc * rowSpc * treesPerSpr)
+      const numSprinklers = numTrees ? Math.ceil(numTrees / treesPerSpr) : 0
+      const totalFlowLph = numSprinklers * flow
+      return { type: "micro", precipRate, numSprinklers, totalFlowLph }
+    }
+    if (irrigType === "overhead") {
+      const flowLpm = parseFloat(overheadFlowRate)
+      const headSpc = parseFloat(overheadHeadSpacing)
+      const latSpc = parseFloat(overheadLateralSpacing)
+      if (!flowLpm || !headSpc || !latSpc) return null
+      const precipRate = (flowLpm * 60) / (headSpc * latSpc)
+      return { type: "simple", precipRate }
+    }
+    if (irrigType === "travelling-gun") {
+      const flowLpm = parseFloat(gunFlowRate)
+      const laneSpc = parseFloat(gunLaneSpacing)
+      const speed = parseFloat(gunTravelSpeed)
+      if (!flowLpm || !laneSpc || !speed) return null
+      const precipRate = (flowLpm * 60) / (laneSpc * speed)
+      return { type: "simple", precipRate }
+    }
+    return null
+  }, [
+    irrigType,
+    dripEmitterFlow, dripEmitterSpacing, dripLinesPerRow, dripRowLength, dripNumRows, dripRowSpacing,
+    microFlowRate, microTreesPerSprinkler, microTreeSpacing, microRowSpacing, microNumTrees,
+    overheadFlowRate, overheadHeadSpacing, overheadLateralSpacing,
+    gunFlowRate, gunLaneSpacing, gunTravelSpeed,
+  ])
+
+  // Sync calculated rate → irrigRate when hardware specs produce a valid result
+  useEffect(() => {
+    if (calculatedRate?.precipRate && irrigType !== "none") {
+      const rounded = String(Math.round(calculatedRate.precipRate * 100) / 100)
+      if (rounded !== irrigRate) setIrrigRate(rounded)
+    }
+  }, [calculatedRate?.precipRate, irrigType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build specs JSON for saving
+  const specsJson = useMemo(() => {
+    if (irrigType === "drip") {
+      return JSON.stringify({
+        emitter_flow_rate_lph: parseFloat(dripEmitterFlow) || 0,
+        emitter_spacing_cm: parseFloat(dripEmitterSpacing) || 0,
+        drip_lines_per_row: parseInt(dripLinesPerRow) || 1,
+        row_length_m: parseFloat(dripRowLength) || 0,
+        num_rows: parseInt(dripNumRows) || 0,
+        row_spacing_m: parseFloat(dripRowSpacing) || 0,
+      })
+    }
+    if (irrigType === "micro-sprinkler") {
+      return JSON.stringify({
+        sprinkler_flow_rate_lph: parseFloat(microFlowRate) || 0,
+        trees_per_sprinkler: parseInt(microTreesPerSprinkler) || 1,
+        wetted_diameter_m: parseFloat(microWettedDiam) || 0,
+        tree_spacing_m: parseFloat(microTreeSpacing) || 0,
+        row_spacing_m: parseFloat(microRowSpacing) || 0,
+        num_trees: parseInt(microNumTrees) || 0,
+      })
+    }
+    if (irrigType === "overhead") {
+      return JSON.stringify({
+        sprinkler_model: overheadModel,
+        flow_rate_per_head_lpm: parseFloat(overheadFlowRate) || 0,
+        head_spacing_m: parseFloat(overheadHeadSpacing) || 0,
+        lateral_spacing_m: parseFloat(overheadLateralSpacing) || 0,
+        operating_pressure_kpa: parseFloat(overheadPressure) || 0,
+        frost_protection: overheadFrostProtection,
+      })
+    }
+    if (irrigType === "travelling-gun") {
+      return JSON.stringify({
+        flow_rate_lpm: parseFloat(gunFlowRate) || 0,
+        lane_spacing_m: parseFloat(gunLaneSpacing) || 0,
+        travel_speed_m_per_hr: parseFloat(gunTravelSpeed) || 0,
+        wetted_width_m: parseFloat(gunWettedWidth) || 0,
+      })
+    }
+    return null
+  }, [
+    irrigType,
+    dripEmitterFlow, dripEmitterSpacing, dripLinesPerRow, dripRowLength, dripNumRows, dripRowSpacing,
+    microFlowRate, microTreesPerSprinkler, microWettedDiam, microTreeSpacing, microRowSpacing, microNumTrees,
+    overheadModel, overheadFlowRate, overheadHeadSpacing, overheadLateralSpacing, overheadPressure, overheadFrostProtection,
+    gunFlowRate, gunLaneSpacing, gunTravelSpeed, gunWettedWidth,
+  ])
+
   const awcPerM = SOIL_AWC[soilType] ?? 190
   const depthM = (parseFloat(rootDepth) || 60) / 100
   const availableWaterMm = Math.round(awcPerM * depthM * 10) / 10
@@ -1270,7 +1424,7 @@ export function SettingsForm({
   const [savedState, setSavedState] = useState({
     name, latitude, longitude, elevation,
     fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
-    irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
+    irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, specsJson,
     alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
     quietStart, quietEnd,
   })
@@ -1294,10 +1448,10 @@ export function SettingsForm({
     if (name !== s.name || latitude !== s.latitude || longitude !== s.longitude || elevation !== s.elevation) dirty.add("profile")
     if (bloomStage !== s.bloomStage || codlingMothBiofix !== s.codlingMothBiofix || petalFallDate !== s.petalFallDate) dirty.add("phenology")
     if (fireBlightHistory !== s.fireBlightHistory) dirty.add("disease")
-    if (irrigEnabled !== s.irrigEnabled || soilType !== s.soilType || rootDepth !== s.rootDepth || mad !== s.mad || irrigType !== s.irrigType || irrigRate !== s.irrigRate || waterCost !== s.waterCost || blockArea !== s.blockArea) dirty.add("irrigation")
+    if (irrigEnabled !== s.irrigEnabled || soilType !== s.soilType || rootDepth !== s.rootDepth || mad !== s.mad || irrigType !== s.irrigType || irrigRate !== s.irrigRate || waterCost !== s.waterCost || blockArea !== s.blockArea || specsJson !== s.specsJson) dirty.add("irrigation")
     if (alertEmail !== s.alertEmail || alertPhone !== s.alertPhone || alertChannel !== s.alertChannel || urgentEnabled !== s.urgentEnabled || warningEnabled !== s.warningEnabled || preparationEnabled !== s.preparationEnabled || quietStart !== s.quietStart || quietEnd !== s.quietEnd) dirty.add("notifications")
     return dirty
-  }, [name, latitude, longitude, elevation, fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix, irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled, quietStart, quietEnd, savedState])
+  }, [name, latitude, longitude, elevation, fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix, irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, specsJson, alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled, quietStart, quietEnd, savedState])
 
   // ── Test alerts ──
   const [testingEmail, setTestingEmail] = useState(false)
@@ -1368,6 +1522,7 @@ export function SettingsForm({
           management_allowable_depletion: (parseFloat(mad) || 50) / 100,
           irrigation_type: irrigType,
           irrigation_rate_mm_per_hour: parseFloat(irrigRate) || 4,
+          irrigation_system_specs: specsJson,
           water_cost_per_m3: parseFloat(waterCost) || 0.06,
           block_area_ha: parseFloat(blockArea) || 1.0,
         }),
@@ -1401,7 +1556,7 @@ export function SettingsForm({
       setSavedState({
         name, latitude, longitude, elevation,
         fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
-        irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
+        irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, specsJson,
         alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
         quietStart, quietEnd,
       })
@@ -1419,7 +1574,7 @@ export function SettingsForm({
   }, [
     initialData.id, name, latitude, longitude, elevation,
     fireBlightHistory, bloomStage, petalFallDate, codlingMothBiofix,
-    irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea,
+    irrigEnabled, soilType, rootDepth, mad, irrigType, irrigRate, waterCost, blockArea, specsJson,
     alertEmail, alertPhone, alertChannel, urgentEnabled, warningEnabled, preparationEnabled,
     quietStart, quietEnd, router,
   ])
@@ -1679,34 +1834,242 @@ export function SettingsForm({
                       </Select>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="irrigRate">Rate</Label>
-                        <DualUnitInput id="irrigRate" value={irrigRate} unitType="irrigationRate" onChange={setIrrigRate} placeholder="e.g. 4 mm/hr or 0.16 in/hr" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="waterCost">Water Cost ($/m&sup3;)</Label>
-                        <Input id="waterCost" type="number" step="0.01" value={waterCost} onChange={(e) => setWaterCost(e.target.value)} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="blockArea">Block Area</Label>
-                        <DualUnitInput id="blockArea" value={blockArea} unitType="area" onChange={setBlockArea} placeholder="e.g. 1.0 ha or 2.5 ac" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-secondary/50 px-4 py-3">
-                      <p className="text-[12px] text-bark-400">
-                        Efficiency: <span className="font-data font-medium text-bark-600">{Math.round(efficiency * 100)}%</span>
-                        {" "}&middot; Gross to refill: <span className="font-data font-medium text-bark-600">{Math.round((triggerMm / efficiency) * 10) / 10}&nbsp;mm ({(Math.round((triggerMm / efficiency) * 10) / 10 / 25.4).toFixed(2)}&nbsp;in)</span>
-                        {parseFloat(irrigRate) > 0 && (
-                          <>
-                            {" "}&middot; <span className="font-data font-medium text-bark-600">
-                              ~{Math.round((triggerMm / efficiency / parseFloat(irrigRate)) * 10) / 10} hrs
-                            </span> run time
-                          </>
+                    {/* ── DRIP SYSTEM SPECS ── */}
+                    {irrigType === "drip" && (
+                      <div className="space-y-4 rounded-lg border border-border/50 p-4">
+                        <p className="text-sm font-medium text-bark-500">Drip System Specs</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripEmitterFlow">Emitter Flow Rate</Label>
+                            <DualUnitInput id="dripEmitterFlow" value={dripEmitterFlow} unitType="waterFlowHourly" onChange={setDripEmitterFlow} placeholder="e.g. 2.0 L/hr or 0.53 gph" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripEmitterSpacing">Emitter Spacing</Label>
+                            <DualUnitInput id="dripEmitterSpacing" value={dripEmitterSpacing} unitType="lengthSmall" onChange={setDripEmitterSpacing} placeholder="e.g. 30 cm or 12 in" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripLinesPerRow">Drip Lines per Row</Label>
+                            <Select value={dripLinesPerRow} onValueChange={(val) => val && setDripLinesPerRow(val)}>
+                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="2">2</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripRowLength">Row Length</Label>
+                            <DualUnitInput id="dripRowLength" value={dripRowLength} unitType="length" onChange={setDripRowLength} placeholder="e.g. 100 m or 328 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripNumRows">Number of Rows</Label>
+                            <Input id="dripNumRows" type="number" min="1" step="1" value={dripNumRows} onChange={(e) => setDripNumRows(e.target.value)} placeholder="e.g. 25" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dripRowSpacing">Row Spacing</Label>
+                            <DualUnitInput id="dripRowSpacing" value={dripRowSpacing} unitType="length" onChange={setDripRowSpacing} placeholder="e.g. 4.0 m or 13.1 ft" />
+                          </div>
+                        </div>
+                        {calculatedRate && calculatedRate.type === "drip" && (
+                          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 space-y-1">
+                            <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-400">Calculated System Performance</p>
+                            <div className="text-[12px] text-emerald-600 dark:text-emerald-400/80 space-y-0.5">
+                              <p>Total emitters: <span className="font-data font-medium">{calculatedRate.totalEmitters.toLocaleString()}</span> ({calculatedRate.emittersPerRow.toLocaleString()} per row &times; {dripNumRows} rows)</p>
+                              <p>Total flow: <span className="font-data font-medium">{(calculatedRate.totalFlowLph / 1000).toFixed(1)}&nbsp;m&sup3;/hr</span> ({(calculatedRate.totalFlowLph * 0.264172).toLocaleString(undefined, { maximumFractionDigits: 0 })}&nbsp;gal/hr)</p>
+                              <p>Precipitation rate: <span className="font-data font-medium">{calculatedRate.precipRate.toFixed(2)}&nbsp;mm/hr</span> ({(calculatedRate.precipRate / 25.4).toFixed(3)}&nbsp;in/hr)</p>
+                              {triggerMm > 0 && (
+                                <>
+                                  <p>To apply {(triggerMm / efficiency).toFixed(0)}&nbsp;mm ({((triggerMm / efficiency) / 25.4).toFixed(1)}&nbsp;in): <span className="font-data font-medium">~{((triggerMm / efficiency) / calculatedRate.precipRate).toFixed(1)} hours</span> run time</p>
+                                  <p>Water volume per cycle: <span className="font-data font-medium">{((triggerMm / efficiency) * calculatedRate.blockAreaM2 / 1000).toFixed(0)}&nbsp;m&sup3;</span> ({((triggerMm / efficiency) * calculatedRate.blockAreaM2 / 1000 * 264.172).toLocaleString(undefined, { maximumFractionDigits: 0 })}&nbsp;gal)</p>
+                                  {parseFloat(waterCost) > 0 && (
+                                    <p>Cost per cycle: <span className="font-data font-medium">${((triggerMm / efficiency) * calculatedRate.blockAreaM2 / 1000 * parseFloat(waterCost)).toFixed(2)}</span></p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
                         )}
-                      </p>
-                    </div>
+                      </div>
+                    )}
+
+                    {/* ── MICRO-SPRINKLER SPECS ── */}
+                    {irrigType === "micro-sprinkler" && (
+                      <div className="space-y-4 rounded-lg border border-border/50 p-4">
+                        <p className="text-sm font-medium text-bark-500">Micro-sprinkler Specs</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microFlowRate">Sprinkler Flow Rate</Label>
+                            <DualUnitInput id="microFlowRate" value={microFlowRate} unitType="waterFlowHourly" onChange={setMicroFlowRate} placeholder="e.g. 50 L/hr or 13.2 gph" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microTreesPerSprinkler">Trees per Sprinkler</Label>
+                            <Select value={microTreesPerSprinkler} onValueChange={(val) => val && setMicroTreesPerSprinkler(val)}>
+                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">1</SelectItem>
+                                <SelectItem value="2">2</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microWettedDiam">Wetted Diameter</Label>
+                            <DualUnitInput id="microWettedDiam" value={microWettedDiam} unitType="length" onChange={setMicroWettedDiam} placeholder="e.g. 4.0 m or 13 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microTreeSpacing">Tree Spacing in Row</Label>
+                            <DualUnitInput id="microTreeSpacing" value={microTreeSpacing} unitType="length" onChange={setMicroTreeSpacing} placeholder="e.g. 3.5 m or 11.5 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microRowSpacing">Row Spacing</Label>
+                            <DualUnitInput id="microRowSpacing" value={microRowSpacing} unitType="length" onChange={setMicroRowSpacing} placeholder="e.g. 4.5 m or 14.8 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="microNumTrees">Number of Trees in Block</Label>
+                            <Input id="microNumTrees" type="number" min="1" step="1" value={microNumTrees} onChange={(e) => setMicroNumTrees(e.target.value)} placeholder="e.g. 500" />
+                          </div>
+                        </div>
+                        {calculatedRate && calculatedRate.type === "micro" && (
+                          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 space-y-1">
+                            <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-400">Calculated System Performance</p>
+                            <div className="text-[12px] text-emerald-600 dark:text-emerald-400/80 space-y-0.5">
+                              {calculatedRate.numSprinklers > 0 && (
+                                <>
+                                  <p>Sprinklers: <span className="font-data font-medium">{calculatedRate.numSprinklers.toLocaleString()}</span></p>
+                                  <p>Total flow: <span className="font-data font-medium">{(calculatedRate.totalFlowLph / 1000).toFixed(1)}&nbsp;m&sup3;/hr</span> ({(calculatedRate.totalFlowLph * 0.264172).toLocaleString(undefined, { maximumFractionDigits: 0 })}&nbsp;gal/hr)</p>
+                                </>
+                              )}
+                              <p>Precipitation rate: <span className="font-data font-medium">{calculatedRate.precipRate.toFixed(2)}&nbsp;mm/hr</span> ({(calculatedRate.precipRate / 25.4).toFixed(3)}&nbsp;in/hr)</p>
+                              {triggerMm > 0 && (
+                                <p>To apply {(triggerMm / efficiency).toFixed(0)}&nbsp;mm: <span className="font-data font-medium">~{((triggerMm / efficiency) / calculatedRate.precipRate).toFixed(1)} hours</span> run time</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── OVERHEAD SPRINKLER SPECS ── */}
+                    {irrigType === "overhead" && (
+                      <div className="space-y-4 rounded-lg border border-border/50 p-4">
+                        <p className="text-sm font-medium text-bark-500">Overhead Sprinkler Specs</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="overheadModel">Sprinkler Model/Type</Label>
+                            <Input id="overheadModel" value={overheadModel} onChange={(e) => setOverheadModel(e.target.value)} placeholder="e.g. Nelson R33" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="overheadFlowRate">Flow Rate per Head</Label>
+                            <DualUnitInput id="overheadFlowRate" value={overheadFlowRate} unitType="waterFlow" onChange={setOverheadFlowRate} placeholder="e.g. 15 L/min or 4 gpm" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="overheadHeadSpacing">Head-to-Head Spacing</Label>
+                            <DualUnitInput id="overheadHeadSpacing" value={overheadHeadSpacing} unitType="length" onChange={setOverheadHeadSpacing} placeholder="e.g. 12 m or 39 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="overheadLateralSpacing">Lateral-to-Lateral Spacing</Label>
+                            <DualUnitInput id="overheadLateralSpacing" value={overheadLateralSpacing} unitType="length" onChange={setOverheadLateralSpacing} placeholder="e.g. 12 m or 39 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="overheadPressure">Operating Pressure</Label>
+                            <DualUnitInput id="overheadPressure" value={overheadPressure} unitType="pressure" onChange={setOverheadPressure} placeholder="e.g. 275 kPa or 40 psi" />
+                          </div>
+                          <div className="flex items-center gap-3 pt-5">
+                            <Switch checked={overheadFrostProtection} onCheckedChange={(val) => setOverheadFrostProtection(val as boolean)} id="overheadFrost" />
+                            <Label htmlFor="overheadFrost">Frost Protection Capable</Label>
+                          </div>
+                        </div>
+                        {calculatedRate && (
+                          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 space-y-1">
+                            <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-400">Calculated System Performance</p>
+                            <div className="text-[12px] text-emerald-600 dark:text-emerald-400/80 space-y-0.5">
+                              <p>Precipitation rate: <span className="font-data font-medium">{calculatedRate.precipRate.toFixed(2)}&nbsp;mm/hr</span> ({(calculatedRate.precipRate / 25.4).toFixed(3)}&nbsp;in/hr)</p>
+                              {triggerMm > 0 && (
+                                <p>To apply {(triggerMm / efficiency).toFixed(0)}&nbsp;mm: <span className="font-data font-medium">~{((triggerMm / efficiency) / calculatedRate.precipRate).toFixed(1)} hours</span> run time</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── TRAVELLING GUN SPECS ── */}
+                    {irrigType === "travelling-gun" && (
+                      <div className="space-y-4 rounded-lg border border-border/50 p-4">
+                        <p className="text-sm font-medium text-bark-500">Travelling Gun Specs</p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="gunFlowRate">Flow Rate</Label>
+                            <DualUnitInput id="gunFlowRate" value={gunFlowRate} unitType="waterFlow" onChange={setGunFlowRate} placeholder="e.g. 500 L/min or 132 gpm" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="gunLaneSpacing">Lane Spacing</Label>
+                            <DualUnitInput id="gunLaneSpacing" value={gunLaneSpacing} unitType="length" onChange={setGunLaneSpacing} placeholder="e.g. 60 m or 197 ft" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="gunTravelSpeed">Travel Speed</Label>
+                            <DualUnitInput id="gunTravelSpeed" value={gunTravelSpeed} unitType="speed" onChange={setGunTravelSpeed} placeholder="e.g. 30 m/hr or 98 ft/hr" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="gunWettedWidth">Wetted Width</Label>
+                            <DualUnitInput id="gunWettedWidth" value={gunWettedWidth} unitType="length" onChange={setGunWettedWidth} placeholder="e.g. 50 m or 164 ft" />
+                          </div>
+                        </div>
+                        {calculatedRate && (
+                          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 space-y-1">
+                            <p className="text-[12px] font-medium text-emerald-700 dark:text-emerald-400">Calculated System Performance</p>
+                            <div className="text-[12px] text-emerald-600 dark:text-emerald-400/80 space-y-0.5">
+                              <p>Precipitation rate: <span className="font-data font-medium">{calculatedRate.precipRate.toFixed(2)}&nbsp;mm/hr</span> ({(calculatedRate.precipRate / 25.4).toFixed(3)}&nbsp;in/hr)</p>
+                              {triggerMm > 0 && (
+                                <p>To apply {(triggerMm / efficiency).toFixed(0)}&nbsp;mm: <span className="font-data font-medium">~{((triggerMm / efficiency) / calculatedRate.precipRate).toFixed(1)} hours</span> run time</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── MANUAL RATE (for "none" or as fallback display) ── */}
+                    {irrigType === "none" && (
+                      <div className="rounded-lg bg-secondary/50 px-4 py-3">
+                        <p className="text-[12px] text-bark-400">No irrigation system configured. Rainfall tracking only.</p>
+                      </div>
+                    )}
+
+                    {irrigType !== "none" && (
+                      <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="waterCost">Water Cost ($/m&sup3;)</Label>
+                            <Input id="waterCost" type="number" step="0.01" value={waterCost} onChange={(e) => setWaterCost(e.target.value)} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="blockArea">Block Area</Label>
+                            <DualUnitInput id="blockArea" value={blockArea} unitType="area" onChange={setBlockArea} placeholder="e.g. 1.0 ha or 2.5 ac" />
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg bg-secondary/50 px-4 py-3">
+                          <p className="text-[12px] text-bark-400">
+                            Efficiency: <span className="font-data font-medium text-bark-600">{Math.round(efficiency * 100)}%</span>
+                            {calculatedRate ? (
+                              <>
+                                {" "}&middot; Precip. rate: <span className="font-data font-medium text-bark-600">{calculatedRate.precipRate.toFixed(2)}&nbsp;mm/hr ({(calculatedRate.precipRate / 25.4).toFixed(3)}&nbsp;in/hr)</span>
+                              </>
+                            ) : (
+                              <>
+                                {" "}&middot; <span className="text-amber-600 dark:text-amber-400">Enter system specs above to auto-calculate rate</span>
+                              </>
+                            )}
+                            {triggerMm > 0 && parseFloat(irrigRate) > 0 && (
+                              <>
+                                {" "}&middot; Gross to refill: <span className="font-data font-medium text-bark-600">{Math.round((triggerMm / efficiency) * 10) / 10}&nbsp;mm</span>
+                                {" "}&middot; <span className="font-data font-medium text-bark-600">~{Math.round((triggerMm / efficiency / parseFloat(irrigRate)) * 10) / 10} hrs</span> run time
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

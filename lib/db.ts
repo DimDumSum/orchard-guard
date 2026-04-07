@@ -1293,6 +1293,55 @@ const migrations: Migration[] = [
       `);
     },
   },
+
+  // -----------------------------------------------------------------------
+  // v7 — Add irrigation system specs + travelling-gun type
+  // -----------------------------------------------------------------------
+  {
+    version: 7,
+    description: "Add irrigation_system_specs column and travelling-gun irrigation type",
+    up(db: DatabaseType) {
+      // Add JSON column for hardware-specific specs
+      db.exec(`ALTER TABLE irrigation_config ADD COLUMN irrigation_system_specs TEXT`);
+
+      // Recreate table to update CHECK constraint for irrigation_type
+      db.exec(`
+        CREATE TABLE irrigation_config_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          orchard_id INTEGER REFERENCES orchards(id) UNIQUE,
+          enabled INTEGER DEFAULT 0,
+          soil_type TEXT DEFAULT 'loam' CHECK(soil_type IN ('sand','loamy-sand','sandy-loam','loam','clay-loam','clay')),
+          root_depth_cm REAL DEFAULT 60,
+          field_capacity_mm REAL DEFAULT 186,
+          wilting_point_mm REAL DEFAULT 72,
+          available_water_mm REAL DEFAULT 114,
+          management_allowable_depletion REAL DEFAULT 0.50,
+          irrigation_type TEXT DEFAULT 'none' CHECK(irrigation_type IN ('drip','micro-sprinkler','overhead','travelling-gun','none')),
+          irrigation_rate_mm_per_hour REAL DEFAULT 4,
+          irrigation_system_specs TEXT,
+          water_cost_per_m3 REAL DEFAULT 0.06,
+          block_area_ha REAL DEFAULT 1.0,
+          notes TEXT
+        );
+
+        INSERT INTO irrigation_config_new (
+          id, orchard_id, enabled, soil_type, root_depth_cm, field_capacity_mm,
+          wilting_point_mm, available_water_mm, management_allowable_depletion,
+          irrigation_type, irrigation_rate_mm_per_hour, water_cost_per_m3,
+          block_area_ha, notes
+        )
+        SELECT
+          id, orchard_id, enabled, soil_type, root_depth_cm, field_capacity_mm,
+          wilting_point_mm, available_water_mm, management_allowable_depletion,
+          irrigation_type, irrigation_rate_mm_per_hour, water_cost_per_m3,
+          block_area_ha, notes
+        FROM irrigation_config;
+
+        DROP TABLE irrigation_config;
+        ALTER TABLE irrigation_config_new RENAME TO irrigation_config;
+      `);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1857,13 +1906,13 @@ export function upsertIrrigationConfig(config: Omit<IrrigationConfig, "id">): vo
     INSERT INTO irrigation_config (
       orchard_id, enabled, soil_type, root_depth_cm, field_capacity_mm,
       wilting_point_mm, available_water_mm, management_allowable_depletion,
-      irrigation_type, irrigation_rate_mm_per_hour, water_cost_per_m3,
-      block_area_ha, notes
+      irrigation_type, irrigation_rate_mm_per_hour, irrigation_system_specs,
+      water_cost_per_m3, block_area_ha, notes
     ) VALUES (
       @orchard_id, @enabled, @soil_type, @root_depth_cm, @field_capacity_mm,
       @wilting_point_mm, @available_water_mm, @management_allowable_depletion,
-      @irrigation_type, @irrigation_rate_mm_per_hour, @water_cost_per_m3,
-      @block_area_ha, @notes
+      @irrigation_type, @irrigation_rate_mm_per_hour, @irrigation_system_specs,
+      @water_cost_per_m3, @block_area_ha, @notes
     )
     ON CONFLICT(orchard_id) DO UPDATE SET
       enabled = excluded.enabled,
@@ -1875,6 +1924,7 @@ export function upsertIrrigationConfig(config: Omit<IrrigationConfig, "id">): vo
       management_allowable_depletion = excluded.management_allowable_depletion,
       irrigation_type = excluded.irrigation_type,
       irrigation_rate_mm_per_hour = excluded.irrigation_rate_mm_per_hour,
+      irrigation_system_specs = excluded.irrigation_system_specs,
       water_cost_per_m3 = excluded.water_cost_per_m3,
       block_area_ha = excluded.block_area_ha,
       notes = excluded.notes
@@ -1889,6 +1939,7 @@ export function upsertIrrigationConfig(config: Omit<IrrigationConfig, "id">): vo
     management_allowable_depletion: config.management_allowable_depletion,
     irrigation_type: config.irrigation_type,
     irrigation_rate_mm_per_hour: config.irrigation_rate_mm_per_hour,
+    irrigation_system_specs: config.irrigation_system_specs ?? null,
     water_cost_per_m3: config.water_cost_per_m3,
     block_area_ha: config.block_area_ha,
     notes: config.notes ?? null,

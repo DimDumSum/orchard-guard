@@ -55,6 +55,7 @@ export default async function SettingsPage() {
         management_allowable_depletion: irrigConfig.management_allowable_depletion,
         irrigation_type: irrigConfig.irrigation_type,
         irrigation_rate_mm_per_hour: irrigConfig.irrigation_rate_mm_per_hour,
+        irrigation_system_specs: irrigConfig.irrigation_system_specs,
         water_cost_per_m3: irrigConfig.water_cost_per_m3,
         block_area_ha: irrigConfig.block_area_ha,
         available_water_mm: irrigConfig.available_water_mm,

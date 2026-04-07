@@ -25,6 +25,7 @@ export const SYSTEM_EFFICIENCY: Record<IrrigationType, number> = {
   drip: 0.90,
   "micro-sprinkler": 0.80,
   overhead: 0.70,
+  "travelling-gun": 0.65,
   none: 1.0,
 }
 
@@ -76,5 +77,6 @@ export const IRRIGATION_TYPE_LABELS: Record<IrrigationType, string> = {
   drip: "Drip",
   "micro-sprinkler": "Micro-sprinkler",
   overhead: "Overhead Sprinkler",
+  "travelling-gun": "Travelling Gun",
   none: "None (rain-fed)",
 }

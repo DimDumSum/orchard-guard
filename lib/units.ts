@@ -16,7 +16,9 @@ export type UnitType =
   | "weight"
   | "volume"
   | "waterFlow"
+  | "waterFlowHourly"
   | "pressure"
+  | "speed"
   | "irrigationRate"
 
 interface UnitDef {
@@ -99,11 +101,23 @@ const UNIT_DEFS: Record<UnitType, UnitDef> = {
     precision: 1,
     hint: "L/min or gpm",
   },
+  waterFlowHourly: {
+    metric: { unit: "L/hr", abbr: ["l/hr", "l/h", "liters/hr", "litres/hr", "lph"] },
+    imperial: { unit: "gph", abbr: ["gph", "gal/hr", "gal/h", "gallons/hr"], factor: 0.264172 },
+    precision: 1,
+    hint: "L/hr or gph",
+  },
   pressure: {
     metric: { unit: "kPa", abbr: ["kpa", "kilopascal", "kilopascals"] },
     imperial: { unit: "psi", abbr: ["psi"], factor: 0.145038 },
     precision: 1,
     hint: "kPa or psi",
+  },
+  speed: {
+    metric: { unit: "m/hr", abbr: ["m/hr", "m/h", "meters/hr", "metres/hr"] },
+    imperial: { unit: "ft/hr", abbr: ["ft/hr", "ft/h", "feet/hr"], factor: 3.28084 },
+    precision: 1,
+    hint: "m/hr or ft/hr",
   },
   irrigationRate: {
     metric: { unit: "mm/hr", abbr: ["mm/hr", "mm/h", "mm/hour"] },

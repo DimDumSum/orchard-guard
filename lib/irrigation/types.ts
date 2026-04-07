@@ -10,7 +10,7 @@ export type SoilType =
   | "clay-loam"
   | "clay"
 
-export type IrrigationType = "drip" | "micro-sprinkler" | "overhead" | "none"
+export type IrrigationType = "drip" | "micro-sprinkler" | "overhead" | "travelling-gun" | "none"
 
 export type MoistureStatus =
   | "saturated"
@@ -37,10 +37,55 @@ export interface IrrigationConfig {
   management_allowable_depletion: number
   irrigation_type: IrrigationType
   irrigation_rate_mm_per_hour: number
+  irrigation_system_specs: string | null
   water_cost_per_m3: number
   block_area_ha: number
   notes: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Hardware-specific specs stored as JSON in irrigation_system_specs
+// ---------------------------------------------------------------------------
+
+export interface DripSpecs {
+  emitter_flow_rate_lph: number
+  emitter_spacing_cm: number
+  drip_lines_per_row: number
+  row_length_m: number
+  num_rows: number
+  row_spacing_m: number
+}
+
+export interface MicroSprinklerSpecs {
+  sprinkler_flow_rate_lph: number
+  trees_per_sprinkler: number
+  wetted_diameter_m: number
+  tree_spacing_m: number
+  row_spacing_m: number
+  num_trees: number
+}
+
+export interface OverheadSpecs {
+  sprinkler_model: string
+  flow_rate_per_head_lpm: number
+  head_spacing_m: number
+  lateral_spacing_m: number
+  operating_pressure_kpa: number
+  frost_protection: boolean
+}
+
+export interface TravellingGunSpecs {
+  flow_rate_lpm: number
+  lane_spacing_m: number
+  travel_speed_m_per_hr: number
+  wetted_width_m: number
+}
+
+export type IrrigationSystemSpecs =
+  | DripSpecs
+  | MicroSprinklerSpecs
+  | OverheadSpecs
+  | TravellingGunSpecs
 
 export interface WaterBalanceRow {
   id: number
