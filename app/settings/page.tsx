@@ -1,11 +1,8 @@
 // ---------------------------------------------------------------------------
 // OrchardGuard Settings Page — Server Component
-//
-// Loads the current orchard configuration and renders the client-side
-// settings form for editing.
 // ---------------------------------------------------------------------------
 
-import { getOrchard, getIrrigationConfig } from "@/lib/db"
+import { getOrchard, getIrrigationConfig, getAlertPrefs } from "@/lib/db"
 import { SettingsForm } from "./settings-form"
 import { ExternalLink, BookOpen } from "lucide-react"
 
@@ -31,7 +28,6 @@ const ontarioResources = [
 export default async function SettingsPage() {
   const orchard = getOrchard()
 
-  // Parse primary_varieties from JSON string to array for the form
   const initialData = orchard
     ? {
         id: orchard.id,
@@ -48,7 +44,6 @@ export default async function SettingsPage() {
       }
     : null
 
-  // Load irrigation config
   const irrigConfig = orchard ? getIrrigationConfig(orchard.id) : null
   const irrigationData = irrigConfig
     ? {
@@ -64,6 +59,20 @@ export default async function SettingsPage() {
       }
     : null
 
+  const alertPrefs = orchard ? getAlertPrefs(orchard.id) : undefined
+  const alertData = alertPrefs
+    ? {
+        email: alertPrefs.email ?? "",
+        phone: alertPrefs.phone ?? "",
+        channel: (alertPrefs.channel ?? "email") as string,
+        urgentEnabled: alertPrefs.urgent_enabled === 1,
+        warningEnabled: alertPrefs.warning_enabled === 1,
+        preparationEnabled: alertPrefs.preparation_enabled === 1,
+        quietStart: alertPrefs.quiet_start ?? 22,
+        quietEnd: alertPrefs.quiet_end ?? 5,
+      }
+    : null
+
   return (
     <div className="space-y-8">
       <div>
@@ -75,7 +84,11 @@ export default async function SettingsPage() {
       </div>
 
       {initialData ? (
-        <SettingsForm initialData={initialData} irrigationData={irrigationData} />
+        <SettingsForm
+          initialData={initialData}
+          irrigationData={irrigationData}
+          alertData={alertData}
+        />
       ) : (
         <p className="text-body text-muted-foreground">
           No orchard found. The database may not be initialized.

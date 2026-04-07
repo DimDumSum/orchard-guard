@@ -240,35 +240,45 @@ export interface TankMixTemplateRow {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton database instance
+// Singleton database instance — uses globalThis to survive Next.js module
+// re-evaluation (HMR in dev, worker respawns in standalone production).
 // ---------------------------------------------------------------------------
 
-let _db: DatabaseType | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __orchardguard_db: DatabaseType | undefined;
+}
 
 /**
  * Return the singleton better-sqlite3 database instance, creating it
  * (and running migrations) on first call.
  */
 export function getDb(): DatabaseType {
-  if (_db) return _db;
+  if (globalThis.__orchardguard_db) return globalThis.__orchardguard_db;
 
   const dbPath =
     process.env.DATABASE_PATH || path.join(process.cwd(), "data", "orchard.db");
+
+  console.log(`[db] Opening database at: ${dbPath}`);
+
   const dataDir = path.dirname(dbPath);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  _db = new Database(dbPath);
+  const db = new Database(dbPath);
 
   // Enable WAL mode for better concurrent read performance in Next.js
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
 
-  createBaseTables(_db);
-  runMigrations(_db);
+  createBaseTables(db);
+  runMigrations(db);
 
-  return _db;
+  console.log(`[db] Database initialized successfully (WAL mode)`);
+
+  globalThis.__orchardguard_db = db;
+  return db;
 }
 
 // ---------------------------------------------------------------------------
