@@ -6,8 +6,14 @@ import { fetchAndStoreEnvCanada } from "@/lib/weather/env-canada"
 /**
  * GET /api/weather/refresh
  *
- * Refreshes weather data from Open-Meteo (primary) with Environment Canada
- * as a fallback. Stores results in the database.
+ * Fetches weather data from BOTH sources:
+ *   1. Environment Canada — real station observations (most accurate for
+ *      current conditions)
+ *   2. Open-Meteo — model-based forecast + recent reanalysis (provides
+ *      7-day forecast that EC doesn't have)
+ *
+ * Both are stored with their respective source tags. The dashboard uses
+ * the most recent hourly record regardless of source.
  *
  * Designed to be called by:
  *   - The instrumentation.ts hourly cron loop
@@ -24,29 +30,33 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Try Open-Meteo first (primary source)
-    const result = await fetchAndStoreWeather(orchard.latitude, orchard.longitude)
+    // Fetch from both sources in parallel — EC for accurate observations,
+    // Open-Meteo for forecast data
+    const [omResult, ecResult] = await Promise.allSettled([
+      fetchAndStoreWeather(orchard.latitude, orchard.longitude),
+      fetchAndStoreEnvCanada(orchard.latitude, orchard.longitude),
+    ])
 
-    // If Open-Meteo returned no data, fall back to Environment Canada
-    if (result.hourly.length === 0) {
-      console.log("[weather/refresh] Open-Meteo returned no data — trying Environment Canada fallback")
-      const ecResult = await fetchAndStoreEnvCanada(orchard.latitude, orchard.longitude)
+    const omData = omResult.status === "fulfilled" ? omResult.value : null
+    const ecData = ecResult.status === "fulfilled" ? ecResult.value : null
 
+    const omCount = omData?.hourly.length ?? 0
+    const ecCount = ecData?.hourly.length ?? 0
+
+    if (omCount === 0 && ecCount === 0) {
       return NextResponse.json({
-        success: ecResult.hourly.length > 0,
-        source: "env-canada",
-        stationName: ecResult.stationName,
-        hourlyCount: ecResult.hourly.length,
-        dailyCount: 0,
+        success: false,
+        error: "No data from either weather source",
         timestamp: new Date().toISOString(),
       })
     }
 
     return NextResponse.json({
       success: true,
-      source: "open-meteo",
-      hourlyCount: result.hourly.length,
-      dailyCount: result.daily.length,
+      sources: {
+        openMeteo: { hourlyCount: omCount, dailyCount: omData?.daily.length ?? 0 },
+        envCanada: { hourlyCount: ecCount, stationName: ecData?.stationName ?? null },
+      },
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
