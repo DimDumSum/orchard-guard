@@ -1362,6 +1362,22 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    description: "Add model_cache table for offline resilience",
+    up(db: DatabaseType) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS model_cache (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          orchard_id  INTEGER REFERENCES orchards(id),
+          cache_key   TEXT NOT NULL DEFAULT 'all_models',
+          result_json TEXT NOT NULL,
+          cached_at   TEXT DEFAULT (datetime('now')),
+          UNIQUE(orchard_id, cache_key)
+        );
+      `);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -2315,4 +2331,56 @@ export function deleteBlockPlanting(id: number): boolean {
     "DELETE FROM block_plantings WHERE id = ?"
   ).run(id);
   return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Model cache — offline resilience
+// ---------------------------------------------------------------------------
+
+export interface ModelCacheRow {
+  id: number;
+  orchard_id: number;
+  cache_key: string;
+  result_json: string;
+  cached_at: string;
+}
+
+/**
+ * Cache model results for offline resilience. Uses UPSERT to always keep
+ * the latest result.
+ */
+export function cacheModelResults(
+  orchardId: number,
+  results: unknown,
+  cacheKey: string = "all_models",
+): void {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO model_cache (orchard_id, cache_key, result_json, cached_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(orchard_id, cache_key) DO UPDATE SET
+      result_json = excluded.result_json,
+      cached_at = excluded.cached_at
+  `).run(orchardId, cacheKey, JSON.stringify(results));
+}
+
+/**
+ * Retrieve cached model results. Returns null if no cache exists.
+ */
+export function getCachedModelResults(
+  orchardId: number,
+  cacheKey: string = "all_models",
+): { results: unknown; cachedAt: string } | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT result_json, cached_at FROM model_cache WHERE orchard_id = ? AND cache_key = ?")
+    .get(orchardId, cacheKey) as { result_json: string; cached_at: string } | undefined;
+
+  if (!row) return null;
+
+  try {
+    return { results: JSON.parse(row.result_json), cachedAt: row.cached_at };
+  } catch {
+    return null;
+  }
 }

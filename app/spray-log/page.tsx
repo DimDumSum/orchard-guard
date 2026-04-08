@@ -5,7 +5,7 @@
 // and spray table client components.
 // ---------------------------------------------------------------------------
 
-import { getDb, getOrchard } from "@/lib/db"
+import { getDb, getOrchard, getOrchardBlocks } from "@/lib/db"
 import type { SprayLogRow } from "@/lib/db"
 import { SprayForm } from "./spray-form"
 import { SprayTable } from "./spray-table"
@@ -27,6 +27,10 @@ export default async function SprayLogPage() {
     )
     .all(orchardId) as SprayLogRow[]
 
+  // Get block names for per-block tracking
+  const orchardBlocks = getOrchardBlocks(orchardId)
+  const blockNames = orchardBlocks.map((b) => b.block_name)
+
   return (
     <div className="space-y-6">
       <div>
@@ -41,7 +45,7 @@ export default async function SprayLogPage() {
       </div>
 
       {/* Add spray form */}
-      <SprayForm orchardId={orchardId} />
+      <SprayForm orchardId={orchardId} blocks={blockNames} />
 
       {/* Spray log table */}
       {entries.length > 0 ? (

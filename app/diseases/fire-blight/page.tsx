@@ -1,6 +1,7 @@
-import { Flame, AlertTriangle, CheckCircle, Droplets, Thermometer } from "lucide-react";
+import { Flame, AlertTriangle, CheckCircle, Droplets, Thermometer, ShieldAlert } from "lucide-react";
 import { TermTooltip } from "@/components/term-tooltip";
-import { getOrchard, getWeatherRange, getDailyWeather } from "@/lib/db";
+import { getOrchard, getWeatherRange, getDailyWeather, getDb } from "@/lib/db";
+import type { SprayLogRow } from "@/lib/db";
 import { evaluateFireBlight, mapLegacyHistory } from "@/lib/models/fire-blight";
 import { calcDegreeHoursFromHourly } from "@/lib/degree-days";
 import {
@@ -98,12 +99,42 @@ export default function FireBlightPage() {
     precip_mm: h.precip_mm ?? 0,
   }));
 
-  // Run the fire blight model
+  // Run the fire blight model with forecast data
+  const forecastHourly = getWeatherRange("default", hourlyEnd, sevenAhead.toISOString().slice(0, 10))
+    .filter((h) => h.temp_c != null && h.humidity_pct != null && h.precip_mm != null)
+    .filter((h) => new Date(h.timestamp).getTime() > now.getTime())
+    .map((h) => ({
+      timestamp: h.timestamp,
+      temp_c: h.temp_c as number,
+      humidity_pct: h.humidity_pct as number,
+      precip_mm: h.precip_mm as number,
+    }));
+
   const result = evaluateFireBlight(
     hourlyMapped,
     orchard.bloom_stage,
     mapLegacyHistory(orchard.fire_blight_history),
+    forecastHourly,
   );
+
+  // Streptomycin application counter — max 3 per season (Ontario OMAFRA)
+  const MAX_STREP_APPLICATIONS = 3;
+  let strepApplications = 0;
+  let strepDates: string[] = [];
+  try {
+    const db = getDb();
+    const currentYear = now.getFullYear();
+    const yearSprays = db
+      .prepare("SELECT date, product FROM spray_log WHERE orchard_id = ? AND date >= ? ORDER BY date")
+      .all(orchard.id, `${currentYear}-01-01`) as SprayLogRow[];
+    const strepSprays = yearSprays.filter((s) =>
+      /streptomycin|streptomycin sulfate|firewall|agri-mycin/i.test(s.product),
+    );
+    strepApplications = strepSprays.length;
+    strepDates = strepSprays.map((s) => s.date);
+  } catch { /* spray log unavailable */ }
+  const strepRemaining = Math.max(0, MAX_STREP_APPLICATIONS - strepApplications);
+  const strepAtLimit = strepApplications >= MAX_STREP_APPLICATIONS;
 
   // Build degree hour accumulation chart data (daily for last 7 days)
   const chartData: Array<{ date: string; degreeHours: number }> = [];
@@ -231,6 +262,77 @@ export default function FireBlightPage() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Streptomycin Application Tracker */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-section-title">
+              <ShieldAlert className="h-5 w-5 text-muted-foreground" />
+              Streptomycin Application Tracker
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <p className="text-caption font-medium uppercase">Applied</p>
+                <p className={cn(
+                  "mt-1 text-2xl font-bold font-data tabular-nums",
+                  strepAtLimit ? "text-red-600" : "text-bark-900",
+                )}>
+                  {strepApplications}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <p className="text-caption font-medium uppercase">Remaining</p>
+                <p className={cn(
+                  "mt-1 text-2xl font-bold font-data tabular-nums",
+                  strepRemaining === 0 ? "text-red-600" : strepRemaining === 1 ? "text-yellow-600" : "text-green-600",
+                )}>
+                  {strepRemaining}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <p className="text-caption font-medium uppercase">Max/Season</p>
+                <p className="mt-1 text-2xl font-bold font-data tabular-nums text-bark-900">
+                  {MAX_STREP_APPLICATIONS}
+                </p>
+              </div>
+            </div>
+
+            {strepAtLimit && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+                <div className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                  <div>
+                    <p className="font-medium text-red-800 dark:text-red-200">
+                      Streptomycin Limit Reached
+                    </p>
+                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                      You have used all {MAX_STREP_APPLICATIONS} permitted streptomycin applications
+                      this season. Further applications risk resistance development and violate
+                      Ontario OMAFRA guidelines. Use alternative products (e.g., copper, Blossom
+                      Protect) for remaining fire blight sprays.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!strepAtLimit && strepApplications > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {strepRemaining} application{strepRemaining !== 1 ? "s" : ""} remaining
+                this season. Previous applications: {strepDates.join(", ")}.
+              </p>
+            )}
+
+            {strepApplications === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No streptomycin applications recorded this season. Ontario permits
+                a maximum of {MAX_STREP_APPLICATIONS} per season to manage resistance risk.
+              </p>
+            )}
           </CardContent>
         </Card>
 

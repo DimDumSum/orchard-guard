@@ -50,13 +50,19 @@ function todayStr(): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function SprayForm({ orchardId = 1 }: { orchardId?: number }) {
+interface SprayFormProps {
+  orchardId?: number
+  blocks?: string[]
+}
+
+export function SprayForm({ orchardId = 1, blocks = [] }: SprayFormProps) {
   const router = useRouter()
 
   const [date, setDate] = useState(todayStr())
   const [product, setProduct] = useState("")
   const [rate, setRate] = useState("")
   const [target, setTarget] = useState("")
+  const [blockName, setBlockName] = useState("")
   const [phiDays, setPhiDays] = useState("")
   const [reiHours, setReiHours] = useState("")
   const [notes, setNotes] = useState("")
@@ -86,6 +92,7 @@ export function SprayForm({ orchardId = 1 }: { orchardId?: number }) {
           product,
           rate: rate || null,
           target,
+          blockName: blockName || null,
           phiDays: phiDays ? parseInt(phiDays, 10) : null,
           reiHours: reiHours ? parseInt(reiHours, 10) : null,
           notes: notes || null,
@@ -101,6 +108,7 @@ export function SprayForm({ orchardId = 1 }: { orchardId?: number }) {
       setProduct("")
       setRate("")
       setTarget("")
+      setBlockName("")
       setPhiDays("")
       setReiHours("")
       setNotes("")
@@ -175,6 +183,26 @@ export function SprayForm({ orchardId = 1 }: { orchardId?: number }) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Block */}
+          {blocks.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Block</Label>
+              <Select value={blockName} onValueChange={(val) => setBlockName(val ?? "")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All blocks" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All blocks</SelectItem>
+                  {blocks.map((b) => (
+                    <SelectItem key={b} value={b}>
+                      {b}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* PHI Days */}
           <div className="space-y-1.5">

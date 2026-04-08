@@ -58,6 +58,7 @@ function formatCoord(value: number, pos: string, neg: string): string {
 }
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000
 
 export function WeatherSummary({
   temp,
@@ -72,7 +73,14 @@ export function WeatherSummary({
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState<"success" | "error" | null>(null)
 
-  const isStale = updatedAt ? getAgeMs(updatedAt) > TWO_HOURS_MS : false
+  const ageMs = updatedAt ? getAgeMs(updatedAt) : Infinity
+  const isStale = ageMs > TWO_HOURS_MS
+  const isVeryStale = ageMs > SIX_HOURS_MS
+  const freshnessColor = isVeryStale
+    ? "bg-red-500"
+    : isStale
+      ? "bg-yellow-500"
+      : "bg-green-500"
 
   // Clear result message after a few seconds
   useEffect(() => {
@@ -81,6 +89,14 @@ export function WeatherSummary({
       return () => clearTimeout(t)
     }
   }, [refreshResult])
+
+  // Auto-refresh when data is very stale (>6h) on mount
+  useEffect(() => {
+    if (isVeryStale && !refreshing) {
+      handleRefresh()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return
@@ -123,16 +139,20 @@ export function WeatherSummary({
           </p>
           {updatedAt && (
             <div className="flex items-center gap-1.5 justify-end mt-0.5">
+              <span
+                className={`inline-block size-2 rounded-full ${freshnessColor}`}
+                title={isVeryStale ? "Data very stale (>6h)" : isStale ? "Data stale (>2h)" : "Data fresh"}
+              />
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
                 className={`text-[11px] cursor-pointer hover:underline transition-colors ${
-                  isStale ? "text-risk-moderate font-medium" : "text-bark-300"
+                  isVeryStale ? "text-risk-high font-medium" : isStale ? "text-risk-moderate font-medium" : "text-bark-300"
                 }`}
                 title="Click to refresh weather data"
               >
                 {formatTimeAgo(updatedAt)}
-                {isStale && " — stale"}
+                {isVeryStale ? " — very stale" : isStale ? " — stale" : ""}
               </button>
               <button
                 onClick={handleRefresh}
