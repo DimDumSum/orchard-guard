@@ -152,6 +152,12 @@ interface OrchardConfig {
   fire_blight_history: string
   petal_fall_date: string | null
   codling_moth_biofix_date: string | null
+  /** Primary variety for bitter pit risk (e.g. "honeycrisp") */
+  primary_variety?: string
+  /** Crop load estimate for bitter pit risk */
+  crop_load?: "light" | "moderate" | "heavy"
+  /** Number of calcium sprays completed this season */
+  calcium_sprays_completed?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +175,7 @@ export function runAllModels(
     hourlyData,
     orchard.bloom_stage as "dormant" | "silver-tip" | "green-tip" | "tight-cluster" | "pink" | "bloom" | "petal-fall" | "fruit-set",
     mapLegacyHistory(orchard.fire_blight_history),
+    forecastData,
   )
   const appleScab = evaluateAppleScab(hourlyData, dailyData, orchard.petal_fall_date, orchard.bloom_stage)
   const frostRisk = evaluateFrostRisk(forecastData.slice(0, 48), orchard.bloom_stage)
@@ -187,7 +194,12 @@ export function runAllModels(
   const postHarvest = evaluatePostHarvest(0, false)
 
   // ── Abiotic / physiological models ──
-  const bitterPit = evaluateBitterPit(hourlyData)
+  const bitterPit = evaluateBitterPit(
+    hourlyData,
+    orchard.primary_variety,
+    orchard.crop_load,
+    orchard.calcium_sprays_completed,
+  )
   const sunscald = evaluateSunscald(dailyData)
   const frostRing = evaluateFrostRing(dailyData, orchard.petal_fall_date)
   const waterCore = evaluateWaterCore(dailyData)
@@ -286,4 +298,45 @@ export type {
   JapaneseBeetleResult, TwoSpottedSpiderMiteResult, AppleRustMiteResult,
   AppleLeafMidgeResult, EuropeanAppleSawflyResult, PearPsyllaResult,
   BMSBResult, SWDResult, VoleResult, DeerResult, DaggerNematodeResult,
+}
+
+// ---------------------------------------------------------------------------
+// Scab infection persistence — logs detected infection events to database
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist new scab infection events from model results to the database.
+ * Deduplicates against already-logged dates to avoid double-counting.
+ */
+export function persistScabInfections(
+  orchardId: number,
+  scabResult: AppleScabResult,
+): number {
+  // Lazy import to avoid circular dependency during module init
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getScabInfectionLog, logScabInfection } = require("@/lib/db")
+
+  const currentYear = new Date().getFullYear()
+  const existingLogs = getScabInfectionLog(orchardId, currentYear) as Array<{ date: string }>
+  const loggedDates = new Set(existingLogs.map((l: { date: string }) => l.date))
+
+  let persisted = 0
+  for (const infection of scabResult.seasonInfections) {
+    if (infection.severity === "none") continue
+    if (loggedDates.has(infection.date)) continue
+
+    logScabInfection({
+      orchard_id: orchardId,
+      date: infection.date,
+      severity: infection.severity as "light" | "moderate" | "severe",
+      mean_temp: infection.meanTemp,
+      wetness_hours: infection.wetnessHours,
+      protected: infection.protected ? 1 : 0,
+      fungicide_used: null,
+      notes: `Auto-logged by model run`,
+    })
+    persisted++
+  }
+
+  return persisted
 }

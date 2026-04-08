@@ -81,9 +81,27 @@ export async function register() {
       }
     }
 
+    let lastBackupDate = ""
+
+    const runDailyBackup = async () => {
+      const today = new Date().toISOString().slice(0, 10)
+      if (today === lastBackupDate) return // already backed up today
+      try {
+        const { runBackup } = await import("@/lib/backup")
+        const success = runBackup()
+        if (success) {
+          lastBackupDate = today
+          console.log("[cron] Daily backup completed")
+        }
+      } catch (err) {
+        console.error("[cron] Backup failed:", err instanceof Error ? err.message : err)
+      }
+    }
+
     const runCron = async () => {
       await refreshWeather()
       await runAlerts()
+      await runDailyBackup()
     }
 
     // First run shortly after server boots
@@ -91,6 +109,6 @@ export async function register() {
     // Then every hour
     setInterval(runCron, INTERVAL_MS)
 
-    console.log("[cron] Scheduler started — weather refresh + alerts every hour")
+    console.log("[cron] Scheduler started — weather refresh + alerts every hour + daily backup")
   }
 }

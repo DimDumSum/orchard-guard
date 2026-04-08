@@ -5,7 +5,7 @@
 // June-July), variety susceptibility, crop load, and calcium spray compliance.
 // ---------------------------------------------------------------------------
 
-import { calcDegreeDaysSine, calcCumulativeDegreeDays } from "@/lib/degree-days"
+// Degree-day utilities available if needed for future enhancements
 
 // ---------------------------------------------------------------------------
 // Types

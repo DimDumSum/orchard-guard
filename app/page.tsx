@@ -10,7 +10,7 @@ import { AlertTriangle, Clock, ShieldOff, ShieldAlert, ChevronRight, RefreshCw }
 import { getOrchard, getWeatherRange, getDailyWeather, getSprayProducts, getDb, getIrrigationConfig, getWaterBalance } from "@/lib/db"
 import type { SprayLogRow } from "@/lib/db"
 import { fetchAndStoreWeather } from "@/lib/weather/open-meteo"
-import { runAllModels } from "@/lib/models"
+import { runAllModels, persistScabInfections } from "@/lib/models"
 import {
   getCurrentSeason,
   extractModelCards,
@@ -28,6 +28,7 @@ import { FireBlightBloomForecast } from "@/components/dashboard/fire-blight-bloo
 import { SprayCoverage } from "@/components/dashboard/spray-coverage"
 import { HealthScoreCard } from "@/components/dashboard/health-score-card"
 import { SoilMoistureCard } from "@/components/dashboard/soil-moisture-card"
+import { VarietyRiskCard } from "@/components/dashboard/variety-risk-card"
 import { buildDashboardData } from "@/lib/irrigation/water-balance"
 import { updateDailyWaterBalance } from "@/lib/irrigation/update-balance"
 
@@ -167,14 +168,41 @@ export default async function DashboardPage() {
       min_temp: d.min_temp as number,
     }))
 
+  // Calcium spray count for bitter pit tracking
+  const calciumProducts = ["calcium chloride", "calcimax", "maestro"]
+  let calciumSpraysCompleted = 0
+  let primaryVariety: string | undefined
+  let orchardVarieties: string[] = []
+  try {
+    const sprayDb = getDb()
+    const yearStart = `${now.getFullYear()}-01-01`
+    const yearSprays = sprayDb
+      .prepare("SELECT product FROM spray_log WHERE orchard_id = ? AND date >= ?")
+      .all(orchard.id, yearStart) as { product: string }[]
+    calciumSpraysCompleted = yearSprays.filter((s) =>
+      calciumProducts.some((cp) => s.product.toLowerCase().includes(cp)),
+    ).length
+  } catch { /* spray log unavailable */ }
+  try {
+    orchardVarieties = JSON.parse(orchard.primary_varieties || "[]") as string[]
+    if (orchardVarieties.length > 0) primaryVariety = orchardVarieties[0]
+  } catch { /* use undefined */ }
+
   // Run all 55 models
   const orchardConfig = {
     bloom_stage: orchard.bloom_stage,
     fire_blight_history: orchard.fire_blight_history,
     petal_fall_date: orchard.petal_fall_date,
     codling_moth_biofix_date: orchard.codling_moth_biofix_date,
+    primary_variety: primaryVariety,
+    calcium_sprays_completed: calciumSpraysCompleted,
   }
   const results = runAllModels(pastHourly, dailyForModels, forecastHourly, orchardConfig)
+
+  // Persist scab infection events to database
+  try {
+    persistScabInfections(orchard.id, results.appleScab)
+  } catch { /* non-critical */ }
 
   // Extract + compute
   const allCards = extractModelCards(results)
@@ -588,6 +616,18 @@ export default async function DashboardPage() {
       {/* Spray coverage (protected/inactive) */}
       {(protectedCoverage.length > 0 || inactiveCoverage.length > 0) && (
         <SprayCoverage coverage={[...protectedCoverage, ...inactiveCoverage]} />
+      )}
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {/* VARIETY RISK COMPARISON                                          */}
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {orchardVarieties.length > 1 && (
+        <VarietyRiskCard
+          varieties={orchardVarieties}
+          hourlyData={pastHourly}
+          bloomStage={orchard.bloom_stage}
+          calciumSpraysCompleted={calciumSpraysCompleted}
+        />
       )}
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}

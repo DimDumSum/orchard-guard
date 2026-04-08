@@ -91,7 +91,7 @@ export function SeasonalRiskGrid({
 
       <Section title="Disease Risk" cards={diseases} hrefBase="/diseases" />
       <Section title="Pest Risk" cards={pests} hrefBase="/pests" />
-      <Section title="Abiotic &amp; Physiological" cards={abiotic} />
+      <Section title="Abiotic & Physiological" cards={abiotic} />
 
       {/* Show all toggle */}
       {secondary.length > 0 && (

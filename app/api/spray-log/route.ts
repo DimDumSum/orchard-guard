@@ -38,6 +38,9 @@ export async function POST(request: NextRequest) {
       phiDays = null,
       reiHours = null,
       notes = null,
+      productId = null,
+      blockName = null,
+      cost = null,
     } = body;
 
     if (!date || !product || !target) {
@@ -51,10 +54,10 @@ export async function POST(request: NextRequest) {
 
     const result = db
       .prepare(
-        `INSERT INTO spray_log (orchard_id, date, product, rate, target, phi_days, rei_hours, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO spray_log (orchard_id, date, product, rate, target, phi_days, rei_hours, notes, product_id, block_name, cost)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(orchardId, date, product, rate, target, phiDays, reiHours, notes);
+      .run(orchardId, date, product, rate, target, phiDays, reiHours, notes, productId, blockName, cost);
 
     const entry = db
       .prepare("SELECT * FROM spray_log WHERE id = ?")
