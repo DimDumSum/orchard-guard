@@ -148,10 +148,10 @@ export default function WeatherPage() {
   for (const h of allHourly) {
     sourceCount.set(h.source, (sourceCount.get(h.source) ?? 0) + 1);
   }
-  const lastRecord = allHourly.length > 0 ? allHourly[allHourly.length - 1] : null;
+  // Latest observation (not forecast) — use pastData for accurate "latest record" display
+  const lastRecord = pastData.length > 0 ? pastData[pastData.length - 1] : null;
 
-  // Suppress unused-variable lint for pastData (kept for future use)
-  void pastData;
+  // pastData is used for lastRecord and future enhancements
 
   return (
     <div className="space-y-6">
