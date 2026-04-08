@@ -50,7 +50,7 @@ function todayStr(): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function SprayForm() {
+export function SprayForm({ orchardId = 1 }: { orchardId?: number }) {
   const router = useRouter()
 
   const [date, setDate] = useState(todayStr())
@@ -81,7 +81,7 @@ export function SprayForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orchardId: 1,
+          orchardId,
           date,
           product,
           rate: rate || null,

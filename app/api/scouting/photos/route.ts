@@ -47,19 +47,36 @@ export async function POST(request: NextRequest) {
       date = (formData.get("date") as string) || date
 
       if (file && file.size > 0) {
-        const uploadsDir = path.join(process.cwd(), "public", "uploads", slug)
+        // Sanitize slug to prevent path traversal attacks
+        const safeSlug = path.basename(slug).replace(/[^a-zA-Z0-9_-]/g, "_")
+        if (!safeSlug) {
+          return NextResponse.json({ error: "Invalid slug" }, { status: 400 })
+        }
+
+        // Validate file extension (allow only images)
+        const allowedExts = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"])
+        const ext = path.extname(file.name).toLowerCase() || ".jpg"
+        if (!allowedExts.has(ext)) {
+          return NextResponse.json({ error: "Only image files are allowed" }, { status: 400 })
+        }
+
+        // Enforce file size limit (10 MB)
+        if (file.size > 10 * 1024 * 1024) {
+          return NextResponse.json({ error: "File size exceeds 10 MB limit" }, { status: 400 })
+        }
+
+        const uploadsDir = path.join(process.cwd(), "public", "uploads", safeSlug)
         if (!fs.existsSync(uploadsDir)) {
           fs.mkdirSync(uploadsDir, { recursive: true })
         }
 
-        const ext = path.extname(file.name) || ".jpg"
         const filename = `${Date.now()}${ext}`
         const fullPath = path.join(uploadsDir, filename)
 
         const buffer = Buffer.from(await file.arrayBuffer())
         fs.writeFileSync(fullPath, buffer)
 
-        filePath = `/uploads/${slug}/${filename}`
+        filePath = `/uploads/${safeSlug}/${filename}`
       }
     } else {
       const body = await request.json()

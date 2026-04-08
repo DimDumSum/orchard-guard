@@ -5,7 +5,7 @@
 // and spray table client components.
 // ---------------------------------------------------------------------------
 
-import { getDb } from "@/lib/db"
+import { getDb, getOrchard } from "@/lib/db"
 import type { SprayLogRow } from "@/lib/db"
 import { SprayForm } from "./spray-form"
 import { SprayTable } from "./spray-table"
@@ -16,14 +16,16 @@ import { Beaker } from "lucide-react"
 
 export default async function SprayLogPage() {
   const db = getDb()
+  const orchard = getOrchard()
+  const orchardId = orchard?.id ?? 1
 
   const entries = db
     .prepare(
       `SELECT * FROM spray_log
-       WHERE orchard_id = 1
+       WHERE orchard_id = ?
        ORDER BY date DESC, created_at DESC`,
     )
-    .all() as SprayLogRow[]
+    .all(orchardId) as SprayLogRow[]
 
   return (
     <div className="space-y-6">
@@ -39,7 +41,7 @@ export default async function SprayLogPage() {
       </div>
 
       {/* Add spray form */}
-      <SprayForm />
+      <SprayForm orchardId={orchardId} />
 
       {/* Spray log table */}
       {entries.length > 0 ? (

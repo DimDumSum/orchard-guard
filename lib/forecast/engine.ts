@@ -540,7 +540,7 @@ function evaluateSprayCoverage(
 
     const daysSince = daysUntil(lastSpray.date, today)
     const product = productMap.get(lastSpray.product?.toLowerCase() ?? "")
-    const isProtectant = !product?.kickback_hours || product.kickback_hours === 0
+    const isProtectant = product ? (!product.kickback_hours || product.kickback_hours === 0) : true
     const protectionWindow = isProtectant ? 12 : 14 // protectants ~10-14 days
 
     if (daysSince <= protectionWindow) {
@@ -588,10 +588,16 @@ function getScabProducts(
       p.product_name.toLowerCase().includes("mancozeb")
   })
 
+  // Build a name→product lookup for O(1) FRAC group resolution
+  const scabProductMap = new Map<string, SprayProductRow>()
+  for (const p of products) {
+    scabProductMap.set(p.product_name.toLowerCase(), p)
+  }
+
   // Count FRAC group usage this season
   const fracUsage = new Map<string, number>()
   for (const s of sprayLog) {
-    const prod = products.find((p) => p.product_name.toLowerCase() === s.product?.toLowerCase())
+    const prod = scabProductMap.get(s.product?.toLowerCase() ?? "")
     if (prod?.frac_irac_group) {
       fracUsage.set(prod.frac_irac_group, (fracUsage.get(prod.frac_irac_group) ?? 0) + 1)
     }

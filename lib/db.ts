@@ -1342,6 +1342,26 @@ const migrations: Migration[] = [
       `);
     },
   },
+
+  // -----------------------------------------------------------------------
+  // v8 — Add performance indexes for weather and spray log queries
+  // -----------------------------------------------------------------------
+  {
+    version: 8,
+    description: "Add indexes on weather_hourly and spray_log for query performance",
+    up(db: DatabaseType) {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_weather_hourly_station_timestamp
+          ON weather_hourly (station_id, timestamp);
+
+        CREATE INDEX IF NOT EXISTS idx_spray_log_orchard_date
+          ON spray_log (orchard_id, date);
+
+        CREATE INDEX IF NOT EXISTS idx_alert_log_orchard_sent
+          ON alert_log (orchard_id, sent_at);
+      `);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
