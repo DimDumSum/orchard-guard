@@ -106,12 +106,24 @@ export async function fetchOpenMeteoData(
       timezone: "America/Toronto",
       past_days: String(pastDays),
       forecast_days: String(forecastDays),
+      // Use the Canadian GEM model from Environment Canada for better
+      // accuracy in Ontario. Falls back to the default endpoint below
+      // if GEM is unavailable.
+      models: "gem_seamless",
       cell_selection: "nearest",
     });
 
-    const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+    // Try the Canadian GEM model first, fall back to the generic endpoint
+    let url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+    let response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
 
-    const response = await fetch(url);
+    // If GEM model fails, retry with the default (global best_match) endpoint
+    if (!response.ok) {
+      console.warn(`[open-meteo] GEM model returned ${response.status}, falling back to default model`);
+      params.delete("models");
+      url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+      response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    }
 
     if (!response.ok) {
       console.error(
