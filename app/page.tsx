@@ -28,6 +28,7 @@ import { FireBlightBloomForecast } from "@/components/dashboard/fire-blight-bloo
 import { SprayCoverage } from "@/components/dashboard/spray-coverage"
 import { HealthScoreCard } from "@/components/dashboard/health-score-card"
 import { SoilMoistureCard } from "@/components/dashboard/soil-moisture-card"
+import { VarietyRiskCard } from "@/components/dashboard/variety-risk-card"
 import { buildDashboardData } from "@/lib/irrigation/water-balance"
 import { updateDailyWaterBalance } from "@/lib/irrigation/update-balance"
 
@@ -171,6 +172,7 @@ export default async function DashboardPage() {
   const calciumProducts = ["calcium chloride", "calcimax", "maestro"]
   let calciumSpraysCompleted = 0
   let primaryVariety: string | undefined
+  let orchardVarieties: string[] = []
   try {
     const sprayDb = getDb()
     const yearStart = `${now.getFullYear()}-01-01`
@@ -182,8 +184,8 @@ export default async function DashboardPage() {
     ).length
   } catch { /* spray log unavailable */ }
   try {
-    const varieties = JSON.parse(orchard.primary_varieties || "[]") as string[]
-    if (varieties.length > 0) primaryVariety = varieties[0]
+    orchardVarieties = JSON.parse(orchard.primary_varieties || "[]") as string[]
+    if (orchardVarieties.length > 0) primaryVariety = orchardVarieties[0]
   } catch { /* use undefined */ }
 
   // Run all 55 models
@@ -614,6 +616,18 @@ export default async function DashboardPage() {
       {/* Spray coverage (protected/inactive) */}
       {(protectedCoverage.length > 0 || inactiveCoverage.length > 0) && (
         <SprayCoverage coverage={[...protectedCoverage, ...inactiveCoverage]} />
+      )}
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {/* VARIETY RISK COMPARISON                                          */}
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      {orchardVarieties.length > 1 && (
+        <VarietyRiskCard
+          varieties={orchardVarieties}
+          hourlyData={pastHourly}
+          bloomStage={orchard.bloom_stage}
+          calciumSpraysCompleted={calciumSpraysCompleted}
+        />
       )}
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}

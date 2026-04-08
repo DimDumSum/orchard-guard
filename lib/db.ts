@@ -447,9 +447,9 @@ function createBaseTables(db: DatabaseType): void {
 
   if (count.cnt === 0) {
     db.prepare(
-      `INSERT INTO orchards (name, latitude, longitude, fire_blight_history)
-       VALUES (?, ?, ?, ?)`
-    ).run("My Apple Orchard", 43.65, -79.38, "in_orchard");
+      `INSERT INTO orchards (name, latitude, longitude, primary_varieties, fire_blight_history)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run("My Apple Orchard", 43.65, -79.38, JSON.stringify(["honeycrisp", "gala", "mcintosh"]), "in_orchard");
   }
 }
 

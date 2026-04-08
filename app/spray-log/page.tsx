@@ -5,14 +5,15 @@
 // and spray table client components.
 // ---------------------------------------------------------------------------
 
-import { getDb, getOrchard, getOrchardBlocks } from "@/lib/db"
+import { getDb, getOrchard, getOrchardBlocks, getSprayProducts } from "@/lib/db"
 import type { SprayLogRow } from "@/lib/db"
 import { SprayForm } from "./spray-form"
 import { SprayTable } from "./spray-table"
+import { ResistanceRotationWarnings } from "@/components/spray-log/resistance-warnings"
 
 export const dynamic = "force-dynamic"
 import { TermTooltip } from "@/components/term-tooltip"
-import { Beaker } from "lucide-react"
+import { Beaker, FileDown } from "lucide-react"
 
 export default async function SprayLogPage() {
   const db = getDb()
@@ -31,21 +32,40 @@ export default async function SprayLogPage() {
   const orchardBlocks = getOrchardBlocks(orchardId)
   const blockNames = orchardBlocks.map((b) => b.block_name)
 
+  // Get spray products for resistance rotation analysis
+  const products = getSprayProducts()
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-[24px] font-bold text-bark-900" style={{ letterSpacing: '-0.02em' }}>Spray Log</h1>
-        <p className="text-[14px] text-bark-400">
-          Record and track spray applications. The system tracks{" "}
-          <TermTooltip term="PHI">PHI</TermTooltip> countdowns,{" "}
-          <TermTooltip term="REI">REI</TermTooltip> status, and{" "}
-          <TermTooltip term="FRAC Group">FRAC</TermTooltip>/<TermTooltip term="IRAC Group">IRAC</TermTooltip> resistance
-          group rotation.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[24px] font-bold text-bark-900" style={{ letterSpacing: '-0.02em' }}>Spray Log</h1>
+          <p className="text-[14px] text-bark-400">
+            Record and track spray applications. The system tracks{" "}
+            <TermTooltip term="PHI">PHI</TermTooltip> countdowns,{" "}
+            <TermTooltip term="REI">REI</TermTooltip> status, and{" "}
+            <TermTooltip term="FRAC Group">FRAC</TermTooltip>/<TermTooltip term="IRAC Group">IRAC</TermTooltip> resistance
+            group rotation.
+          </p>
+        </div>
+        {entries.length > 0 && (
+          <a
+            href="/spray-log/export"
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <FileDown className="size-4" />
+            Export / Print
+          </a>
+        )}
       </div>
 
       {/* Add spray form */}
       <SprayForm orchardId={orchardId} blocks={blockNames} />
+
+      {/* Resistance rotation warnings */}
+      {entries.length > 1 && (
+        <ResistanceRotationWarnings entries={entries} products={products} />
+      )}
 
       {/* Spray log table */}
       {entries.length > 0 ? (
