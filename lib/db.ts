@@ -1512,15 +1512,35 @@ export function getWeatherRange(
   endDate: string
 ): WeatherHourlyRow[] {
   const db = getDb();
+  // When multiple sources exist for the same timestamp, prefer real
+  // station observations (env-canada) over model data (open-meteo).
+  // The subquery picks the best row per timestamp using source priority.
   return db
     .prepare(
       `SELECT * FROM weather_hourly
        WHERE station_id = ?
          AND timestamp >= ?
          AND timestamp < datetime(?, '+1 day')
+         AND id IN (
+           SELECT id FROM (
+             SELECT id, ROW_NUMBER() OVER (
+               PARTITION BY station_id, timestamp
+               ORDER BY CASE source
+                 WHEN 'env-canada' THEN 1
+                 WHEN 'custom' THEN 2
+                 WHEN 'open-meteo' THEN 3
+                 ELSE 4
+               END
+             ) AS rn
+             FROM weather_hourly
+             WHERE station_id = ?
+               AND timestamp >= ?
+               AND timestamp < datetime(?, '+1 day')
+           ) WHERE rn = 1
+         )
        ORDER BY timestamp`
     )
-    .all(stationId, startDate, endDate) as WeatherHourlyRow[];
+    .all(stationId, startDate, endDate, stationId, startDate, endDate) as WeatherHourlyRow[];
 }
 
 /**

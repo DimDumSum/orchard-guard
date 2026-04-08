@@ -48,16 +48,17 @@ interface ClimateStation {
 }
 
 const ONTARIO_STATIONS: ClimateStation[] = [
-  { id: 51459, name: "Toronto Pearson", lat: 43.68, lon: -79.63 },
+  { id: 51459, name: "Toronto Pearson Intl", lat: 43.68, lon: -79.63 },
   { id: 45638, name: "Hamilton RBG", lat: 43.28, lon: -79.88 },
   { id: 48549, name: "Simcoe", lat: 42.84, lon: -80.30 },
   { id: 50089, name: "Vineland", lat: 43.15, lon: -79.40 },
-  { id: 51459, name: "Trenton", lat: 44.12, lon: -77.53 },
-  { id: 50310, name: "Belleville", lat: 44.15, lon: -77.40 },
+  { id: 50310, name: "Trenton RCAF", lat: 44.12, lon: -77.53 },
   { id: 48568, name: "Collingwood", lat: 44.50, lon: -80.22 },
-  { id: 48569, name: "Barrie", lat: 44.38, lon: -79.70 },
+  { id: 48569, name: "Barrie-Oro", lat: 44.48, lon: -79.55 },
   { id: 27174, name: "Ottawa CDA", lat: 45.38, lon: -75.72 },
-  { id: 50089, name: "St. Catharines", lat: 43.17, lon: -79.24 },
+  { id: 4337, name: "Kingston Climate", lat: 44.22, lon: -76.60 },
+  { id: 48573, name: "Peterborough", lat: 44.23, lon: -78.36 },
+  { id: 52600, name: "Mountain View (Prince Edward Co)", lat: 44.04, lon: -77.38 },
 ]
 
 /**

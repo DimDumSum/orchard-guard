@@ -106,6 +106,7 @@ export async function fetchOpenMeteoData(
       timezone: "America/Toronto",
       past_days: String(pastDays),
       forecast_days: String(forecastDays),
+      cell_selection: "nearest",
     });
 
     const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
