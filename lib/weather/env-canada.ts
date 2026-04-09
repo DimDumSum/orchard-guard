@@ -140,8 +140,9 @@ function parseHourlyCSV(csvText: string): EnvCanadaHourlyRecord[] {
     const dateStr = fields[dateIdx]
     if (!dateStr) continue
 
-    // Parse date — EC format is typically "2026-04-08 14:00"
-    const timestamp = dateStr.replace(" ", "T") + ":00"
+    // Parse date — EC format is "2026-04-08 14:00" in local standard time.
+    // EC uses LST (no DST adjustment), so always EST (UTC-5).
+    const timestamp = dateStr.replace(" ", "T") + ":00-05:00"
 
     const temp = tempIdx >= 0 ? parseFloat(fields[tempIdx]) : NaN
     const dew = dewIdx >= 0 ? parseFloat(fields[dewIdx]) : NaN

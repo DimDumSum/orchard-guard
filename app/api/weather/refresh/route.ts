@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getOrchard } from "@/lib/db"
+import { getOrchard, getDb } from "@/lib/db"
 import { fetchAndStoreWeather } from "@/lib/weather/open-meteo"
 import { fetchAndStoreEnvCanada } from "@/lib/weather/env-canada"
 
@@ -29,6 +29,20 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       )
     }
+
+    // Clear old bare-timestamp data (pre-timezone-fix) so it doesn't
+    // interfere with the corrected offset-aware timestamps
+    try {
+      const db = getDb()
+      // Delete records that lack a timezone offset (no + or - after time)
+      const deleted = db.prepare(
+        `DELETE FROM weather_hourly
+         WHERE timestamp NOT LIKE '%+%' AND timestamp NOT LIKE '%-__:__'`
+      ).run()
+      if (deleted.changes > 0) {
+        console.log(`[weather/refresh] Cleaned ${deleted.changes} bare-timestamp records`)
+      }
+    } catch { /* non-critical */ }
 
     // Fetch from both sources in parallel — EC for accurate observations,
     // Open-Meteo for forecast data
