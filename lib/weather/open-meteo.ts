@@ -9,6 +9,56 @@ import { upsertWeatherHourly, type WeatherHourlyRow } from "@/lib/db";
 import { estimateLeafWetness } from "@/lib/degree-days";
 
 // ---------------------------------------------------------------------------
+// Timezone helpers
+//
+// Open-Meteo returns timestamps in the requested timezone (America/Toronto)
+// WITHOUT an offset suffix. Since the server runs in UTC, we must append
+// the correct EDT/EST offset so that `new Date()` parses them correctly.
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether a given date falls in Eastern Daylight Time (EDT) or
+ * Eastern Standard Time (EST) and return the ISO offset string.
+ *
+ * EDT (UTC-4): second Sunday of March → first Sunday of November
+ * EST (UTC-5): first Sunday of November → second Sunday of March
+ */
+function torontoOffset(dateStr: string): string {
+  // Parse the bare timestamp as if it were UTC to inspect month/day
+  const d = new Date(dateStr + "Z")
+  const year = d.getUTCFullYear()
+  const month = d.getUTCMonth() // 0-indexed
+
+  // Quick check: Apr-Oct is always EDT, Dec-Feb is always EST
+  if (month >= 3 && month <= 9) return "-04:00" // Apr-Oct → EDT
+  if (month === 11 || month <= 1) return "-05:00" // Dec-Feb → EST
+
+  // March: EDT starts 2nd Sunday at 2 AM
+  if (month === 2) {
+    const firstDay = new Date(Date.UTC(year, 2, 1)).getUTCDay()
+    const secondSunday = firstDay === 0 ? 8 : 15 - firstDay
+    return d.getUTCDate() >= secondSunday ? "-04:00" : "-05:00"
+  }
+
+  // November: EST starts 1st Sunday at 2 AM
+  if (month === 10) {
+    const firstDay = new Date(Date.UTC(year, 10, 1)).getUTCDay()
+    const firstSunday = firstDay === 0 ? 1 : 8 - firstDay
+    return d.getUTCDate() >= firstSunday ? "-05:00" : "-04:00"
+  }
+
+  return "-05:00" // fallback EST
+}
+
+/**
+ * Convert a bare Open-Meteo timestamp (America/Toronto local) to a proper
+ * ISO 8601 string with timezone offset.
+ */
+function toISOWithOffset(bareTimestamp: string): string {
+  return bareTimestamp + torontoOffset(bareTimestamp)
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -153,7 +203,7 @@ export async function fetchOpenMeteoData(
         }
 
         hourly.push({
-          timestamp: h.time[i],
+          timestamp: toISOWithOffset(h.time[i]),
           source: "open-meteo",
           temp_c: temp ?? null,
           humidity_pct: humidity ?? null,
