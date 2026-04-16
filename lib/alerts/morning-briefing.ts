@@ -18,6 +18,7 @@ import { generateWeekAhead } from "@/lib/forecast"
 import { evaluateAlerts } from "@/lib/alerts"
 import type { PendingAlert } from "./types"
 import type { ForecastDaySummary, WeekAheadData } from "@/lib/forecast/types"
+import { calcSeasonDD } from "@/lib/phenology"
 
 // ---------------------------------------------------------------------------
 // Brand constants
@@ -394,7 +395,11 @@ export async function generateMorningBriefing(): Promise<{
   )
 
   // Evaluate alerts
-  const evaluation = evaluateAlerts(results, weekAhead, orchard.bloom_stage)
+  const ddData = dailyData
+    .filter((d: any) => d.max_temp != null && d.min_temp != null)
+    .map((d: any) => ({ date: d.date, max_temp: d.max_temp as number, min_temp: d.min_temp as number }))
+  const seasonDD = calcSeasonDD(ddData)
+  const evaluation = evaluateAlerts(results, weekAhead, orchard.bloom_stage, seasonDD)
 
   // Build email content
   const todayWeather = weekAhead.days.find((d) => d.isToday) ?? null

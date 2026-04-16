@@ -15,6 +15,7 @@ interface ModelCardData {
   recommendation?: string
   forecastNote?: string
   watchNote?: string
+  stageRelevance?: "active" | "upcoming" | "complete"
 }
 
 function Section({
@@ -41,6 +42,7 @@ function Section({
             recommendation={card.recommendation}
             forecastNote={card.forecastNote}
             watchNote={card.watchNote}
+            stageRelevance={card.stageRelevance}
             href={hrefBase}
           />
         ))}

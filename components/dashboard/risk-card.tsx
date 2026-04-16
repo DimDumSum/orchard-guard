@@ -14,6 +14,7 @@ interface RiskCardProps {
   watchNote?: string
   icon?: React.ReactNode
   href?: string
+  stageRelevance?: "active" | "upcoming" | "complete"
 }
 
 const riskHex: Record<string, string> = {
@@ -29,6 +30,12 @@ const riskHex: Record<string, string> = {
 
 const isElevated = new Set(["high", "severe", "extreme", "critical"])
 
+const RELEVANCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  active: { bg: "var(--badge-green-bg)", text: "var(--badge-green-text)", label: "Active now" },
+  upcoming: { bg: "var(--badge-blue-bg, #DBEAFE)", text: "var(--badge-blue-text, #1E40AF)", label: "Upcoming" },
+  complete: { bg: "var(--bark-100, #F5F0E8)", text: "var(--bark-400, #A0926B)", label: "Season complete" },
+}
+
 export function RiskCard({
   title,
   riskLevel,
@@ -39,6 +46,7 @@ export function RiskCard({
   watchNote,
   icon,
   href,
+  stageRelevance,
 }: RiskCardProps) {
   const level = riskLevel.toLowerCase()
   const hex = riskHex[level] ?? riskHex.none
@@ -61,15 +69,28 @@ export function RiskCard({
           )}
           <h3 className="text-[15px] font-medium text-bark-900 truncate">{title}</h3>
         </div>
-        <span
-          className="shrink-0 text-[11px] uppercase font-bold tracking-wide px-3 py-0.5 rounded-[20px]"
-          style={{
-            backgroundColor: `${hex}18`,
-            color: hex,
-          }}
-        >
-          {riskLevel}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {stageRelevance && (
+            <span
+              className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-[20px]"
+              style={{
+                backgroundColor: RELEVANCE_STYLES[stageRelevance]?.bg,
+                color: RELEVANCE_STYLES[stageRelevance]?.text,
+              }}
+            >
+              {RELEVANCE_STYLES[stageRelevance]?.label}
+            </span>
+          )}
+          <span
+            className="text-[11px] uppercase font-bold tracking-wide px-3 py-0.5 rounded-[20px]"
+            style={{
+              backgroundColor: `${hex}18`,
+              color: hex,
+            }}
+          >
+            {riskLevel}
+          </span>
+        </div>
       </div>
 
       {/* Summary line */}

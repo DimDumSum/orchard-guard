@@ -15,6 +15,7 @@
 import type { PendingAlert, AlertEvaluation } from "./types"
 import type { AllModelResults } from "@/lib/models"
 import type { WeekAheadData, ForecastDaySummary } from "@/lib/forecast/types"
+import { getStageFromDD, getModelStageRelevance, PHENOLOGY_STAGES } from "@/lib/phenology"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -84,6 +85,7 @@ export function evaluateAlerts(
   modelResults: AllModelResults,
   weekAhead: WeekAheadData,
   bloomStage: string,
+  seasonDD?: number,
 ): AlertEvaluation {
   const urgent: PendingAlert[] = []
   const warning: PendingAlert[] = []
@@ -1239,5 +1241,26 @@ export function evaluateAlerts(
     }
   }
 
-  return { urgent, warning, preparation }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STAGE-RELEVANCE FILTER
+  //
+  // Only keep alerts for models that are "active" or "upcoming" for the
+  // current phenological stage.  Models whose season is complete should not
+  // generate new alerts (spray coverage alerts are always kept).
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const currentPhenoStage = getStageFromDD(seasonDD ?? 0)
+  const stageIdx = PHENOLOGY_STAGES.indexOf(currentPhenoStage)
+
+  function isRelevantAlert(alert: PendingAlert): boolean {
+    if (alert.model === "sprayCoverage") return true // always relevant
+    const relevance = getModelStageRelevance(alert.model, stageIdx >= 0 ? stageIdx : 0)
+    return relevance === "active" || relevance === "upcoming"
+  }
+
+  return {
+    urgent: urgent.filter(isRelevantAlert),
+    warning: warning.filter(isRelevantAlert),
+    preparation: preparation.filter(isRelevantAlert),
+  }
 }

@@ -22,6 +22,7 @@ export interface ModelCardData {
   recommendation?: string
   forecastNote?: string
   watchNote?: string
+  stageRelevance?: "active" | "upcoming" | "complete"
 }
 
 export const SEASON_LABELS: Record<Season, string> = {

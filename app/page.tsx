@@ -21,6 +21,8 @@ import { enrichCardsWithForecast } from "@/lib/forecast/enrich-cards"
 
 import { WeatherSummary } from "@/components/dashboard/weather-summary"
 import { BloomStageCard } from "@/components/dashboard/bloom-stage-card"
+import { GrowthStageCard } from "@/components/dashboard/growth-stage-card"
+import { PhenologyStrip } from "@/components/dashboard/phenology-strip"
 import { ForecastStrip } from "@/components/dashboard/forecast-strip"
 import { ActionCardComponent } from "@/components/dashboard/action-card"
 import { SprayDays } from "@/components/dashboard/spray-days"
@@ -31,6 +33,7 @@ import { SoilMoistureCard } from "@/components/dashboard/soil-moisture-card"
 import { VarietyRiskCard } from "@/components/dashboard/variety-risk-card"
 import { buildDashboardData } from "@/lib/irrigation/water-balance"
 import { updateDailyWaterBalance } from "@/lib/irrigation/update-balance"
+import { calcSeasonDD, getStageFromDD, getModelStageRelevance, PHENOLOGY_STAGES } from "@/lib/phenology"
 
 export const dynamic = "force-dynamic"
 
@@ -188,6 +191,27 @@ export default async function DashboardPage() {
     if (orchardVarieties.length > 0) primaryVariety = orchardVarieties[0]
   } catch { /* use undefined */ }
 
+  // Phenology: compute degree days (base 4.4°C) from Jan 1
+  const dailyWithDates = dailyData
+    .filter((d) => d.max_temp != null && d.min_temp != null)
+    .map((d) => ({
+      date: d.date,
+      max_temp: d.max_temp as number,
+      min_temp: d.min_temp as number,
+    }))
+  const seasonDD = calcSeasonDD(dailyWithDates)
+  const phenoStage = getStageFromDD(seasonDD)
+  const phenoStageIdx = PHENOLOGY_STAGES.indexOf(phenoStage)
+
+  // Forecast daily for growth stage transition estimate
+  const forecastDailyForPheno = dailyData
+    .filter((d) => d.date >= todayStr && d.max_temp != null && d.min_temp != null)
+    .slice(0, 10)
+    .map((d) => ({
+      max_temp: d.max_temp as number,
+      min_temp: d.min_temp as number,
+    }))
+
   // Run all 55 models
   const orchardConfig = {
     bloom_stage: orchard.bloom_stage,
@@ -237,6 +261,12 @@ export default async function DashboardPage() {
 
   // Enrich cards with forecast context
   const enrichedCards = enrichCardsWithForecast(allCards, weekAhead.days, forecastDaily, orchard.bloom_stage)
+
+  // Add stage-relevance badge to each card
+  for (const card of enrichedCards) {
+    card.stageRelevance = getModelStageRelevance(card.key, phenoStageIdx)
+  }
+
   const { primary, secondary } = getSeasonalCards(enrichedCards, season)
 
   // Current weather for header
@@ -448,7 +478,17 @@ export default async function DashboardPage() {
         />
       )}
 
-      {/* ── BLOOM PROGRESS ── */}
+      {/* ── PHENOLOGY: Growth Stage Card ── */}
+      <GrowthStageCard
+        dailyData={dailyWithDates}
+        forecastDaily={forecastDailyForPheno}
+        bloomStage={orchard.bloom_stage}
+      />
+
+      {/* ── PHENOLOGY: Season Progress Strip ── */}
+      <PhenologyStrip currentDD={seasonDD} />
+
+      {/* ── BLOOM PROGRESS (manual override) ── */}
       <BloomStageCard
         currentStage={orchard.bloom_stage}
         orchardId={orchard.id}

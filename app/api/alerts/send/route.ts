@@ -13,6 +13,7 @@ import { runAllModels } from "@/lib/models"
 import { generateWeekAhead } from "@/lib/forecast"
 import { evaluateAlerts, sendAlerts } from "@/lib/alerts"
 import type { AlertPreferences } from "@/lib/alerts/types"
+import { calcSeasonDD } from "@/lib/phenology"
 
 export async function POST(request: Request) {
   try {
@@ -111,7 +112,11 @@ export async function POST(request: Request) {
     )
 
     // Evaluate and send
-    const evaluation = evaluateAlerts(results, weekAhead, orchard.bloom_stage)
+    const ddData = dailyData
+      .filter((d: any) => d.max_temp != null && d.min_temp != null)
+      .map((d: any) => ({ date: d.date, max_temp: d.max_temp as number, min_temp: d.min_temp as number }))
+    const seasonDD = calcSeasonDD(ddData)
+    const evaluation = evaluateAlerts(results, weekAhead, orchard.bloom_stage, seasonDD)
     const sendResults = await sendAlerts(evaluation, prefs, orchard.name)
 
     const totalAlerts = evaluation.urgent.length + evaluation.warning.length + evaluation.preparation.length

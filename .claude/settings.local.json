@@ -61,7 +61,10 @@
       "Bash(find \"C:\\\\Users\\\\Justin\\\\Documents\\\\orchard-guard\\\\lib\" -type f -name \"*.ts\" 2>/dev/null | grep -v node_modules)",
       "Bash(node -e \"const s = require\\('@base-ui/react/select'\\); console.log\\(Object.keys\\(s.Select\\)\\)\")",
       "Bash(node -e \"\nconst { JSDOM } = require\\('jsdom'\\) || {};\nconst React = require\\('react'\\);\nconst ReactDOM = require\\('react-dom/server'\\);\n// Just check if Portal renders to body or inline\nconst sel = require\\('@base-ui/react/select'\\);\nconsole.log\\('Portal:', typeof sel.Select.Portal\\);\nconsole.log\\('Portal props:', sel.Select.Portal.toString\\(\\).substring\\(0, 200\\)\\);\n\")",
-      "Bash(node -e \"console.log\\(require\\('@base-ui/react/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('@base-ui/react/package.json'\\).version\\)\")",
+      "Bash(npm install:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase --continue)"
     ]
   }
 }

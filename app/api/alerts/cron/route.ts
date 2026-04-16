@@ -23,6 +23,7 @@ import { generateWeekAhead } from "@/lib/forecast"
 import { evaluateAlerts, sendAlerts, isEmailConfigured } from "@/lib/alerts"
 import type { AlertPreferences } from "@/lib/alerts/types"
 import { generateMorningBriefing } from "@/lib/alerts/morning-briefing"
+import { calcSeasonDD } from "@/lib/phenology"
 import { Resend } from "resend"
 
 // ---------------------------------------------------------------------------
@@ -156,8 +157,12 @@ export async function GET(request: Request) {
       orchardConfig, products, sprayLog,
     )
 
-    // ── Evaluate alerts ──
-    const evaluation = evaluateAlerts(modelResults, weekAhead, orchard.bloom_stage)
+    // ── Evaluate alerts (with phenology stage-relevance filtering) ──
+    const ddData = dailyData
+      .filter((d: any) => d.max_temp != null && d.min_temp != null)
+      .map((d: any) => ({ date: d.date, max_temp: d.max_temp as number, min_temp: d.min_temp as number }))
+    const seasonDD = calcSeasonDD(ddData)
+    const evaluation = evaluateAlerts(modelResults, weekAhead, orchard.bloom_stage, seasonDD)
     const totalAlerts = evaluation.urgent.length + evaluation.warning.length + evaluation.preparation.length
 
     // ── Send urgent alerts (every hour) ──
