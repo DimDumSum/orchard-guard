@@ -650,6 +650,12 @@ export default async function DashboardPage() {
           days={forecastStripDays}
           detailedDays={weekAhead.days}
           bloomStage={orchard.bloom_stage}
+          todayObserved={{
+            precipMm: r1(precipLast24h),
+            humidity: latestHourly ? Math.round(latestHourly.humidity_pct) : null,
+            currentPrecipRate: latestHourly ? (latestHourly.precip_mm ?? 0) : 0,
+            updatedAt: latestHourly?.timestamp ?? null,
+          }}
         />
       )}
 

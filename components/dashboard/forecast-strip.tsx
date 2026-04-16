@@ -5,6 +5,13 @@ import { ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ForecastDaySummary, ForecastRiskLevel } from "@/lib/forecast/types"
 
+interface TodayObserved {
+  precipMm: number
+  humidity: number | null
+  currentPrecipRate: number
+  updatedAt: string | null
+}
+
 interface ForecastStripProps {
   days: Array<{
     date: string
@@ -16,6 +23,7 @@ interface ForecastStripProps {
   }>
   detailedDays: ForecastDaySummary[]
   bloomStage: string
+  todayObserved?: TodayObserved
 }
 
 const FROST_THRESHOLDS: Record<string, { kill10: number; kill90: number }> = {
@@ -89,14 +97,26 @@ function isToday(dateString: string): boolean {
   )
 }
 
-function getRiskMessage(day: { high: number; low: number; precip: number; riskLevel: string }, bloomStage: string): string {
+function getRiskMessage(
+  day: { high: number; low: number; precip: number; riskLevel: string },
+  bloomStage: string,
+  observed?: TodayObserved,
+): string {
   const level = day.riskLevel.toLowerCase()
   const thresholds = FROST_THRESHOLDS[bloomStage] ?? FROST_THRESHOLDS.dormant
   const stageLabel = BLOOM_LABELS[bloomStage] ?? bloomStage
   const marginToKill = day.low - thresholds.kill10
 
+  // For today's row, use observed conditions to determine wet/dry state
+  const effectivePrecip = observed ? observed.precipMm : day.precip
+  const isWet = observed
+    ? (observed.precipMm > 0.5 || (observed.humidity !== null && observed.humidity > 85) || observed.currentPrecipRate > 0)
+    : day.precip > 0.5
+  const isRaining = observed ? observed.currentPrecipRate > 0 : false
+
   if (level === "high" || level === "extreme" || level === "critical") {
-    if (day.precip > 5 && day.high > 10) return "Infection risk \u2014 rain + warmth"
+    if (effectivePrecip > 5 && day.high > 10) return "Infection risk \u2014 rain + warmth"
+    if (isRaining && day.high > 10) return "Infection risk \u2014 active rain + warmth"
     if (day.low <= -2) {
       // Only flag frost as real warning if within 3°C of kill threshold
       if (marginToKill <= 3) {
@@ -107,8 +127,10 @@ function getRiskMessage(day: { high: number; low: number; precip: number; riskLe
     return "Elevated risk \u2014 monitor closely"
   }
   if (level === "moderate" || level === "caution") {
-    if (day.precip > 5 && day.high > 10) return "Warm + rain \u2014 monitor for disease"
-    if (day.precip > 5) return "Heavy rain \u2014 watch conditions"
+    if (effectivePrecip > 5 && day.high > 10) return "Warm + rain \u2014 monitor for disease"
+    if (isRaining) return "Rain in progress \u2014 monitor conditions"
+    if (isWet && day.high > 10) return "Wet conditions \u2014 monitor for disease"
+    if (effectivePrecip > 5) return "Heavy rain \u2014 watch conditions"
     if (day.low <= 0) {
       if (marginToKill <= 3) {
         return `Near-freezing (${day.low}°C) \u2014 ${Math.round(marginToKill)}°C above kill threshold`
@@ -118,13 +140,16 @@ function getRiskMessage(day: { high: number; low: number; precip: number; riskLe
     return "Moderate conditions \u2014 stay aware"
   }
   // Low risk
-  if (day.precip === 0 && day.high > 10) return "Dry \u2014 good fieldwork day"
-  if (day.precip === 0) return "No risks"
-  if (day.precip > 0 && day.high < 5) return "Cold rain \u2014 no disease concern"
+  if (isRaining) return "Rain in progress \u2014 low disease risk"
+  if (isWet && day.high > 10) return "Wet \u2014 watch for prolonged leaf wetness"
+  if (isWet) return "Wet \u2014 low disease concern at current temps"
+  if (effectivePrecip === 0 && day.high > 10) return "Dry \u2014 good fieldwork day"
+  if (effectivePrecip === 0) return "No risks"
+  if (effectivePrecip > 0 && day.high < 5) return "Cold rain \u2014 no disease concern"
   return "Low risk"
 }
 
-export function ForecastStrip({ days, detailedDays, bloomStage }: ForecastStripProps) {
+export function ForecastStrip({ days, detailedDays, bloomStage, todayObserved }: ForecastStripProps) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
 
   // Build a lookup from date to detailed risks
@@ -150,6 +175,10 @@ export function ForecastStrip({ days, detailedDays, bloomStage }: ForecastStripP
         const isExpanded = expandedDate === day.date
         const detail = detailMap.get(day.date)
         const hasRisks = detail && detail.risks.length > 0 && detail.worstRisk !== "low"
+
+        // For today: use observed precip instead of forecast
+        const observed = today ? todayObserved : undefined
+        const displayPrecip = observed ? observed.precipMm : day.precip
 
         return (
           <div key={day.date}>
@@ -177,12 +206,12 @@ export function ForecastStrip({ days, detailedDays, bloomStage }: ForecastStripP
                 {day.high}&deg; <span className="text-bark-300">{day.low}&deg;</span>
               </span>
 
-              {/* Precip */}
+              {/* Precip — today shows observed, future shows forecast */}
               <span className="font-data text-[12px] text-bark-400">
-                {day.precip > 0 ? `${day.precip}mm` : "\u2014"}
+                {displayPrecip > 0 ? `${displayPrecip}mm` : "\u2014"}
               </span>
 
-              {/* Risk */}
+              {/* Risk — today uses observed conditions */}
               <span
                 className={cn(
                   "text-[13px] flex items-center gap-2.5",
@@ -190,7 +219,13 @@ export function ForecastStrip({ days, detailedDays, bloomStage }: ForecastStripP
                 )}
               >
                 <span className={cn("size-[5px] rounded-full shrink-0", dot)} />
-                {getRiskMessage(day, bloomStage)}
+                {getRiskMessage(day, bloomStage, observed)}
+                {today && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-primary font-medium ml-1 shrink-0">
+                    <span className="size-[6px] rounded-full bg-primary animate-pulse" />
+                    live
+                  </span>
+                )}
               </span>
 
               {/* Expand indicator */}
