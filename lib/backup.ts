@@ -14,7 +14,7 @@ function getDbPath(): string {
 }
 
 function getBackupsDir(): string {
-  return path.join(PROJECT_ROOT, "backups")
+  return path.join(PROJECT_ROOT, "data", "backups")
 }
 
 function formatTimestamp(): string {
