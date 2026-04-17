@@ -115,6 +115,7 @@ export default async function DashboardPage() {
 
   // Prepare date ranges
   const now = new Date()
+  const todayStr = toDateStr(now)
   const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const sevenDaysAhead = new Date(now)
@@ -237,7 +238,6 @@ export default async function DashboardPage() {
   const season = getCurrentSeason(orchard.bloom_stage)
 
   // --- Forecast engine ---
-  const todayStr = toDateStr(now)
   const forecastDaily = dailyData.filter((d) => d.date >= todayStr).slice(0, 7)
   const products = getSprayProducts()
 
