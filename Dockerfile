@@ -1,20 +1,21 @@
 # ---- Base ----
 FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
 # ---- Dependencies ----
 FROM base AS deps
 # better-sqlite3 needs build tools for the native addon
 RUN apk add --no-cache python3 make g++
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # ---- Build ----
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # ---- Production ----
 FROM base AS runner
