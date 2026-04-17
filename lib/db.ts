@@ -1378,6 +1378,42 @@ const migrations: Migration[] = [
       `);
     },
   },
+  // -----------------------------------------------------------------------
+  // v10 — Fix weather_daily view to aggregate by local date instead of UTC
+  //
+  // The timestamps in weather_hourly are stored with Toronto timezone
+  // offsets (e.g. "2026-04-16T23:00:00-04:00"). The old view used
+  // date(timestamp), which SQLite evaluates in UTC — shifting late-evening
+  // rain to the next calendar day. substr(timestamp, 1, 10) extracts the
+  // local date directly from the ISO string without any UTC conversion.
+  // -----------------------------------------------------------------------
+  {
+    version: 10,
+    description: "Fix weather_daily view to aggregate by local date instead of UTC",
+    up(db: DatabaseType) {
+      db.exec(`DROP VIEW IF EXISTS weather_daily`);
+      db.exec(`
+        CREATE VIEW weather_daily AS
+        SELECT
+          station_id,
+          substr(timestamp, 1, 10)                              AS date,
+          max(temp_c)                                           AS max_temp,
+          min(temp_c)                                           AS min_temp,
+          avg(temp_c)                                           AS mean_temp,
+          sum(precip_mm)                                        AS total_precip,
+          avg(humidity_pct)                                     AS avg_humidity,
+          max(humidity_pct)                                     AS max_humidity,
+          sum(leaf_wetness_hours)                               AS leaf_wetness_hours,
+          sum(max(temp_c - 15.5, 0))                            AS degree_hours_15_5,
+          sum(max(temp_c - 18.3, 0))                            AS degree_hours_18_3,
+          sum(max(temp_c - 10.0, 0))                            AS degree_hours_10,
+          max((max(temp_c) + min(temp_c)) / 2.0 - 5.0,  0)     AS degree_days_base5,
+          max((max(temp_c) + min(temp_c)) / 2.0 - 10.0, 0)     AS degree_days_base10
+        FROM weather_hourly
+        GROUP BY station_id, substr(timestamp, 1, 10)
+      `);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

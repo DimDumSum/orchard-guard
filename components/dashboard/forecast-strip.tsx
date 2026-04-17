@@ -65,36 +65,23 @@ const riskHex: Record<string, string> = {
   critical: "#DC2626",
 }
 
+function torontoToday(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" })
+}
+
 function formatDayName(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return "Today"
-  }
-  const tomorrow = new Date(now)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  if (
-    date.getFullYear() === tomorrow.getFullYear() &&
-    date.getMonth() === tomorrow.getMonth() &&
-    date.getDate() === tomorrow.getDate()
-  ) {
-    return "Tomorrow"
-  }
-  return date.toLocaleDateString("en-US", { weekday: "long" })
+  const today = torontoToday()
+  if (dateString === today) return "Today"
+  // Tomorrow: add 1 day to a Date parsed in Toronto time
+  const t = new Date(today + "T12:00:00-04:00")
+  t.setDate(t.getDate() + 1)
+  const tomorrow = t.toLocaleDateString("en-CA", { timeZone: "America/Toronto" })
+  if (dateString === tomorrow) return "Tomorrow"
+  return new Date(dateString + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" })
 }
 
 function isToday(dateString: string): boolean {
-  const date = new Date(dateString)
-  const now = new Date()
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  )
+  return dateString === torontoToday()
 }
 
 function getRiskMessage(

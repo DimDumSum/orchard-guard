@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic"
 // ---------------------------------------------------------------------------
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Toronto" })
 }
 
 const STATUS_HEX: Record<MoistureStatus, string> = {

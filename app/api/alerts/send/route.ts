@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     // Fetch data
     const now = new Date()
-    const toDateStr = (d: Date) => d.toISOString().slice(0, 10)
+    const toDateStr = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Toronto" })
     const sevenDaysAgo = new Date(now)
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
     const sevenDaysAhead = new Date(now)
