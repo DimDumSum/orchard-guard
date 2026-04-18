@@ -29,16 +29,21 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
+# su-exec for dropping privileges in entrypoint
+RUN apk add --no-cache su-exec
+
 # Copy standalone output
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Ensure data directory exists (Railway volume will mount here)
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
-USER nextjs
-
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
